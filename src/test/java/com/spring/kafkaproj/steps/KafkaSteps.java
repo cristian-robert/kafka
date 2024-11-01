@@ -12,8 +12,14 @@ import io.cucumber.java.en.Then;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.ResourceLoader;
+import org.springframework.util.FileCopyUtils;
 import org.testng.Assert;
 
+import java.io.InputStreamReader;
+import java.io.Reader;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 @RequiredArgsConstructor
@@ -23,16 +29,16 @@ public class KafkaSteps {
     private final KafkaProducerService producerService;
     private final KafkaConsumerService consumerService;
     private final ObjectMapper objectMapper;
+    private final ResourceLoader resourceLoader;
 
     @Value("${test.kafka.timeout-seconds:90}")
     private long timeoutSeconds;
 
     @Given("I send {string} to {string} kafka topic")
     public void sendJsonToKafkaTopic(String jsonFile, String topic, io.cucumber.datatable.DataTable dataTable) throws Exception {
-        log.info("Loading JSON file: {} for topic: {}", jsonFile, topic);
-
-        JsonNode json = objectMapper.readTree(getClass().getResourceAsStream("/" + jsonFile));
-        String jsonString = json.toString();
+        // Load JSON from payload directory
+        String jsonString = loadJsonFromPayloadFile(jsonFile);
+        log.info("Loaded JSON template: {}", jsonString);
 
         Map<String, String> modifications = dataTable.asMap(String.class, String.class);
         for (Map.Entry<String, String> entry : modifications.entrySet()) {
@@ -41,6 +47,21 @@ public class KafkaSteps {
 
         log.info("Sending modified JSON: {}", jsonString);
         producerService.sendMessage(topic, jsonString);
+    }
+
+    private String loadJsonFromPayloadFile(String jsonFile) throws Exception {
+        String filePath = jsonFile.startsWith("/") ? jsonFile : "/payload/" + jsonFile;
+        Resource resource = resourceLoader.getResource("classpath:" + filePath);
+
+        try (Reader reader = new InputStreamReader(resource.getInputStream(), StandardCharsets.UTF_8)) {
+            String content = FileCopyUtils.copyToString(reader);
+            // Validate that it's a valid JSON
+            objectMapper.readTree(content);
+            return content;
+        } catch (Exception e) {
+            log.error("Error loading JSON file {}: {}", filePath, e.getMessage());
+            throw new RuntimeException("Error loading JSON payload: " + filePath, e);
+        }
     }
 
     @Then("I should find matching message in {string} topic")
