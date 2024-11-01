@@ -84,6 +84,21 @@ public class KafkaSteps {
 
     private String updateJsonValue(String jsonString, String path, String value) {
         try {
+            // Handle null or "null" string values
+            if (value == null || value.equalsIgnoreCase("null")) {
+                return JsonPath.parse(jsonString)
+                        .set(normalizePath(path), null)
+                        .jsonString();
+            }
+
+            // Handle empty string
+            if (value.isEmpty()) {
+                return JsonPath.parse(jsonString)
+                        .set(normalizePath(path), "")
+                        .jsonString();
+            }
+
+            // Handle numeric values
             if (value.matches("-?\\d+(\\.\\d+)?")) {
                 if (value.contains(".")) {
                     return JsonPath.parse(jsonString)
@@ -94,17 +109,33 @@ public class KafkaSteps {
                             .set(normalizePath(path), Long.parseLong(value))
                             .jsonString();
                 }
-            } else if (value.equalsIgnoreCase("true") || value.equalsIgnoreCase("false")) {
+            }
+
+            // Handle boolean values
+            if (value.equalsIgnoreCase("true") || value.equalsIgnoreCase("false")) {
                 return JsonPath.parse(jsonString)
                         .set(normalizePath(path), Boolean.parseBoolean(value))
                         .jsonString();
-            } else {
+            }
+
+            // Handle special string values that might indicate null
+            if (value.equalsIgnoreCase("<null>") || value.equalsIgnoreCase("${null}")) {
                 return JsonPath.parse(jsonString)
-                        .set(normalizePath(path), value)
+                        .set(normalizePath(path), null)
                         .jsonString();
             }
+
+            // Default: treat as string
+            return JsonPath.parse(jsonString)
+                    .set(normalizePath(path), value)
+                    .jsonString();
+
         } catch (PathNotFoundException e) {
+            log.error("Path not found: {}", path);
             throw new RuntimeException("Invalid JSON path: " + path, e);
+        } catch (Exception e) {
+            log.error("Error updating JSON value for path: {}, value: {}", path, value);
+            throw new RuntimeException("Error updating JSON value: " + e.getMessage(), e);
         }
     }
 
