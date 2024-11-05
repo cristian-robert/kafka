@@ -23,19 +23,61 @@ public class ExtentReportConfig {
             .setReportName(spark.getReportName())
             .setTimeStampFormat(spark.getTimestampFormat())
             .enableTimeline(true)
-            .setCSS(".badge-primary { background-color: #1967d2 !important; }" +
-                   ".badge-success { background-color: #0a8040 !important; }" +
-                   ".badge-danger { background-color: #dc3545 !important; }" +
-                   ".dashboard-view { padding: 20px !important; }" +
-                   ".dashboard-view .card { box-shadow: 0 2px 4px rgba(0,0,0,.1) !important; }" +
-                   ".test-details-dropdown { padding: 10px !important; }" +
-                   ".charts-row { margin-top: 20px !important; }" +
-                   ".dashboard-summary-chart { height: 350px !important; }" +
-                   ".environment-details { margin-top: 20px !important; }")
-            .setJS("document.getElementsByClassName('logo')[0].style.display='none';" +
-                  "document.getElementsByClassName('dashboard-view')[0].style.backgroundColor='#f8f9fa';" +
-                  "$('.dashboard-view .card').hover(function(){$(this).addClass('shadow-lg')},function(){$(this).removeClass('shadow-lg')});");
-
+                        .setCSS(
+                // Base styles for dark theme
+                "body.dark { background-color: #1a1a1a !important; color: #ffffff !important; }" +
+                ".dark .card { background-color: #2d2d2d !important; border: none !important; box-shadow: 0 2px 6px rgba(0,0,0,0.5) !important; }" +
+                ".dark .card-header { background-color: #383838 !important; border-bottom: 1px solid #404040 !important; }" +
+                
+                // Status badges
+                ".badge-pass { background-color: #00af00 !important; color: #ffffff !important; }" +
+                ".badge-fail { background-color: #f44336 !important; color: #ffffff !important; }" +
+                ".badge-skip { background-color: #ff9800 !important; color: #ffffff !important; }" +
+                ".badge-warning { background-color: #ff9800 !important; color: #ffffff !important; }" +
+                ".badge-info { background-color: #2196f3 !important; color: #ffffff !important; }" +
+                
+                // Dashboard improvements
+                ".dark .dashboard-view { background-color: #1a1a1a !important; padding: 20px !important; }" +
+                ".dark .dashboard-view .card:hover { transform: translateY(-2px); transition: all .3s ease; }" +
+                
+                // Tables
+                ".dark .table { color: #ffffff !important; }" +
+                ".dark .table td, .dark .table th { border-top: 1px solid #404040 !important; }" +
+                ".dark .table thead th { border-bottom: 2px solid #404040 !important; }" +
+                
+                // Charts
+                ".dark .charts-row { margin-top: 30px !important; }" +
+                ".dark .dashboard-summary-chart { height: 350px !important; background-color: #2d2d2d !important; }" +
+                
+                // Navigation
+                ".dark .nav-item { background-color: #2d2d2d !important; }" +
+                ".dark .nav-item.active { background-color: #383838 !important; }" +
+                ".dark .nav-link { color: #ffffff !important; }" +
+                
+                // Search and filters
+                ".dark .form-control { background-color: #2d2d2d !important; border: 1px solid #404040 !important; color: #ffffff !important; }" +
+                ".dark .form-control:focus { border-color: #2196f3 !important; box-shadow: 0 0 0 0.2rem rgba(33,150,243,.25) !important; }" +
+                
+                // Timeline
+                ".dark .timeline-item-wrap { background-color: #2d2d2d !important; }" +
+                ".dark .timeline-item { border-color: #404040 !important; }"
+            )
+            .setJS(
+                // Remove default logo and add some animations
+                "document.getElementsByClassName('logo')[0].style.display='none';" +
+                
+                // Enhance cards with hover effect
+                "$('.card').hover(" +
+                "function() { $(this).css('transform', 'translateY(-5px)'); }," +
+                "function() { $(this).css('transform', 'translateY(0)'); }" +
+                ");" +
+                
+                // Add smooth transitions
+                "document.head.insertAdjacentHTML('beforeend', '<style>" +
+                "* { transition: all .2s ease-in-out !important; }" +
+                ".card { transition: transform .3s ease-in-out !important; }" +
+                "</style>');"
+            );
         // Set view order for better navigation
         sparkReporter.viewConfigurer()
             .viewOrder()
