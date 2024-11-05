@@ -1,0 +1,116 @@
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.MimeMessageHelper;
+import org.springframework.stereotype.Service;
+import javax.mail.internet.MimeMessage;
+import java.io.File;
+import java.nio.file.Files;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+
+@Service
+@Slf4j
+public class EmailService {
+
+    @Autowired
+    private JavaMailSender emailSender;
+
+    public void sendReportByEmail(String to) {
+        try {
+            MimeMessage message = emailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+
+            // Read the Extent Report HTML file
+            String reportPath = "test-output/SparkReport/Spark.html";
+            String reportContent = new String(Files.readAllBytes(new File(reportPath).toPath()));
+
+            // Create email content with embedded styles
+            String emailContent = createEmailTemplate(reportContent);
+
+            helper.setFrom("your-email@company.com");
+            helper.setTo(to);
+            helper.setSubject("Test Automation Report - " + getCurrentDateTime());
+            helper.setText(emailContent, true); // true indicates HTML content
+
+            // Attach the original report as a file (optional)
+            FileSystemResource file = new FileSystemResource(new File(reportPath));
+            helper.addAttachment("TestReport.html", file);
+
+            emailSender.send(message);
+            log.info("Report email sent successfully to: {}", to);
+
+        } catch (Exception e) {
+            log.error("Failed to send report email: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to send report email", e);
+        }
+    }
+
+    private String createEmailTemplate(String reportContent) {
+        return """
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <style>
+                    /* Email client safe styles */
+                    body { 
+                        font-family: Arial, sans-serif; 
+                        line-height: 1.6; 
+                        margin: 0; 
+                        padding: 20px;
+                    }
+                    .header {
+                        background-color: #2d2d2d;
+                        color: white;
+                        padding: 20px;
+                        text-align: center;
+                        margin-bottom: 20px;
+                    }
+                    .content {
+                        background-color: #ffffff;
+                        padding: 20px;
+                        border-radius: 5px;
+                    }
+                    .report-container {
+                        margin-top: 20px;
+                        border: 1px solid #ddd;
+                        padding: 20px;
+                    }
+                    .footer {
+                        margin-top: 20px;
+                        text-align: center;
+                        color: #666;
+                        font-size: 12px;
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <h2>Test Automation Report</h2>
+                    <p>Generated on: %s</p>
+                </div>
+                
+                <div class="content">
+                    <p>Hello,</p>
+                    <p>Please find the latest test automation execution report below.</p>
+                    
+                    <div class="report-container">
+                        %s
+                    </div>
+                    
+                    <p>Note: If the report is not displaying correctly, please use the attached HTML file.</p>
+                </div>
+                
+                <div class="footer">
+                    <p>This is an automated email. Please do not reply.</p>
+                </div>
+            </body>
+            </html>
+            """.formatted(getCurrentDateTime(), reportContent);
+    }
+
+    private String getCurrentDateTime() {
+        return LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+    }
+}
