@@ -1,0 +1,25 @@
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+@Service
+public class ReportService {
+    
+    @Autowired
+    private EmailService emailService;
+    
+    public void sendReportAfterExecution() {
+        try {
+            // You can add multiple recipients
+            String[] recipients = {
+                "team-member1@company.com",
+                "team-member2@company.com"
+            };
+            
+            for (String recipient : recipients) {
+                emailService.sendReportByEmail(recipient);
+            }
+        } catch (Exception e) {
+            log.error("Failed to send report: {}", e.getMessage(), e);
+        }
+    }
+}
