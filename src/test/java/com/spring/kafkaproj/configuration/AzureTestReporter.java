@@ -1,14 +1,3 @@
-import io.cucumber.plugin.ConcurrentEventListener;
-import io.cucumber.plugin.event.*;
-import org.springframework.http.*;
-import org.springframework.web.client.RestTemplate;
-import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.stereotype.Component;
-
-import java.util.Base64;
-import java.util.Collections;
-import java.util.Optional;
-
 @Component
 @ConfigurationProperties(prefix = "azure")
 public class AzureTestReporter implements ConcurrentEventListener {
@@ -20,6 +9,20 @@ public class AzureTestReporter implements ConcurrentEventListener {
 
     public AzureTestReporter() {
         this.restTemplate = new RestTemplate();
+    }
+
+    // Response class for Test Run
+    public static class TestRunResponse {
+        @JsonProperty("id")
+        private Integer id;
+
+        public Integer getId() {
+            return id;
+        }
+
+        public void setId(Integer id) {
+            this.id = id;
+        }
     }
 
     @Override
@@ -43,9 +46,9 @@ public class AzureTestReporter implements ConcurrentEventListener {
 
     private Optional<Integer> getAzureTestCaseId(TestCase testCase) {
         return testCase.getTags().stream()
-            .filter(tag -> tag.getName().startsWith("@TC"))
+            .filter(tag -> tag.toString().startsWith("@TC"))
             .findFirst()
-            .map(tag -> Integer.parseInt(tag.getName().substring(3)));
+            .map(tag -> Integer.parseInt(tag.toString().substring(3)));
     }
 
     private Integer createTestRun() {
@@ -54,13 +57,21 @@ public class AzureTestReporter implements ConcurrentEventListener {
 
         HttpHeaders headers = createHeaders();
         
-        var requestBody = Map.of(
-            "name", "Automated Test Run " + System.currentTimeMillis(),
-            "isAutomated", true
-        );
+        HashMap<String, Object> requestBody = new HashMap<>();
+        requestBody.put("name", "Automated Test Run " + System.currentTimeMillis());
+        requestBody.put("isAutomated", true);
 
         var request = new HttpEntity<>(requestBody, headers);
-        var response = restTemplate.exchange(url, HttpMethod.POST, request, TestRunResponse.class);
+        ResponseEntity<TestRunResponse> response = restTemplate.exchange(
+            url,
+            HttpMethod.POST,
+            request,
+            TestRunResponse.class
+        );
+        
+        if (response.getBody() == null) {
+            throw new RuntimeException("Failed to create test run - no response body");
+        }
         
         return response.getBody().getId();
     }
@@ -71,13 +82,14 @@ public class AzureTestReporter implements ConcurrentEventListener {
 
         HttpHeaders headers = createHeaders();
         
-        var testResult = Collections.singletonList(Map.of(
-            "testCaseId", testCaseId,
-            "outcome", outcome,
-            "errorMessage", error != null ? error.getMessage() : null
-        ));
+        List<HashMap<String, Object>> testResults = new ArrayList<>();
+        HashMap<String, Object> testResult = new HashMap<>();
+        testResult.put("testCaseId", testCaseId);
+        testResult.put("outcome", outcome);
+        testResult.put("errorMessage", error != null ? error.getMessage() : null);
+        testResults.add(testResult);
 
-        var request = new HttpEntity<>(testResult, headers);
+        var request = new HttpEntity<>(testResults, headers);
         restTemplate.exchange(url, HttpMethod.PATCH, request, Void.class);
     }
 
