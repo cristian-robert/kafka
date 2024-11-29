@@ -1,3 +1,4 @@
+
 @Component
 @ConfigurationProperties(prefix = "azure")
 public class AzureTestReporter implements ConcurrentEventListener {
@@ -11,7 +12,6 @@ public class AzureTestReporter implements ConcurrentEventListener {
         this.restTemplate = new RestTemplate();
     }
 
-    // Response class for Test Run
     public static class TestRunResponse {
         @JsonProperty("id")
         private Integer id;
@@ -52,28 +52,52 @@ public class AzureTestReporter implements ConcurrentEventListener {
     }
 
     private Integer createTestRun() {
-        String url = String.format("https://dev.azure.com/%s/%s/_apis/test/runs?api-version=6.0",
-            organization, project);
+        try {
+            String url = String.format("https://dev.azure.com/%s/%s/_apis/test/runs?api-version=6.0",
+                organization, project);
+            
+            System.out.println("Calling Azure DevOps URL: " + url);  // Debug log
 
-        HttpHeaders headers = createHeaders();
-        
-        HashMap<String, Object> requestBody = new HashMap<>();
-        requestBody.put("name", "Automated Test Run " + System.currentTimeMillis());
-        requestBody.put("isAutomated", true);
+            HttpHeaders headers = createHeaders();
+            System.out.println("Using Authorization header: " + headers.getFirst(HttpHeaders.AUTHORIZATION));  // Debug log
+            
+            HashMap<String, Object> requestBody = new HashMap<>();
+            requestBody.put("name", "Automated Test Run " + System.currentTimeMillis());
+            requestBody.put("isAutomated", true);
+            requestBody.put("state", "InProgress");
+            requestBody.put("type", "NoConfigRun");
 
-        var request = new HttpEntity<>(requestBody, headers);
-        ResponseEntity<TestRunResponse> response = restTemplate.exchange(
-            url,
-            HttpMethod.POST,
-            request,
-            TestRunResponse.class
-        );
-        
-        if (response.getBody() == null) {
-            throw new RuntimeException("Failed to create test run - no response body");
+            var request = new HttpEntity<>(requestBody, headers);
+            
+            ResponseEntity<String> rawResponse = restTemplate.exchange(
+                url,
+                HttpMethod.POST,
+                request,
+                String.class  // First get raw response to debug
+            );
+            
+            System.out.println("Raw Response: " + rawResponse.getBody());  // Debug log
+            System.out.println("Response Status: " + rawResponse.getStatusCode());  // Debug log
+            System.out.println("Response Headers: " + rawResponse.getHeaders());  // Debug log
+
+            // If we get here successfully, try parsing as JSON
+            ResponseEntity<TestRunResponse> response = restTemplate.exchange(
+                url,
+                HttpMethod.POST,
+                request,
+                TestRunResponse.class
+            );
+            
+            if (response.getBody() == null) {
+                throw new RuntimeException("Failed to create test run - no response body");
+            }
+            
+            return response.getBody().getId();
+        } catch (Exception e) {
+            System.err.println("Error creating test run: " + e.getMessage());
+            e.printStackTrace();
+            throw e;
         }
-        
-        return response.getBody().getId();
     }
 
     private void updateTestResult(Integer testCaseId, String outcome, Throwable error) {
@@ -95,10 +119,14 @@ public class AzureTestReporter implements ConcurrentEventListener {
 
     private HttpHeaders createHeaders() {
         HttpHeaders headers = new HttpHeaders();
-        String auth = ":" + pat;
-        byte[] encodedAuth = Base64.getEncoder().encode(auth.getBytes());
-        headers.set(HttpHeaders.AUTHORIZATION, "Basic " + new String(encodedAuth));
+        
+        // Format for Personal Access Token authentication
+        String encodedPat = Base64.getEncoder().encodeToString((":" + pat).getBytes());
+        headers.set(HttpHeaders.AUTHORIZATION, "Basic " + encodedPat);
+        
         headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setAccept(List.of(MediaType.APPLICATION_JSON));  // Explicitly request JSON response
+        
         return headers;
     }
 
