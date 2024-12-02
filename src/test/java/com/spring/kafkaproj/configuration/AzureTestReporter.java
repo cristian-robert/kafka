@@ -8,7 +8,35 @@ public class AzureTestReporter implements ConcurrentEventListener {
     @Override
     public void setEventPublisher(EventPublisher publisher) {
         System.out.println("Publisher set");
+        runId = createTestRun();
         publisher.registerHandlerFor(TestCaseFinished.class, this::handleTestCaseFinished);
+    }
+
+    private Integer createTestRun() {
+        try {
+            String url = String.format("https://dev.azure.com/%s/%s/_apis/test/runs?api-version=6.0",
+                organization, project);
+            System.out.println("Creating test run at URL: " + url);
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("Authorization", "Basic " + Base64.getEncoder().encodeToString((":" + pat).getBytes()));
+            headers.setContentType(MediaType.APPLICATION_JSON);
+
+            Map<String, Object> runInfo = new HashMap<>();
+            runInfo.put("name", "Automated Test Run " + System.currentTimeMillis());
+            runInfo.put("isAutomated", true);
+            runInfo.put("state", "InProgress");
+
+            var request = new HttpEntity<>(runInfo, headers);
+            var response = restTemplate.exchange(url, HttpMethod.POST, request, Map.class);
+            Integer newRunId = ((Number) response.getBody().get("id")).intValue();
+            System.out.println("Created test run with ID: " + newRunId);
+            return newRunId;
+        } catch (Exception e) {
+            System.err.println("Error creating test run: " + e.getMessage());
+            e.printStackTrace();
+            return null;
+        }
     }
 
     private void handleTestCaseFinished(TestCaseFinished event) {
@@ -23,7 +51,7 @@ public class AzureTestReporter implements ConcurrentEventListener {
                 .orElse(null);
 
             System.out.println("Found Test Case ID: " + testCaseId);
-            if (testCaseId != null) {
+            if (testCaseId != null && runId != null) {
                 updateTestResult(testCaseId, event.getResult().getStatus().toString());
             }
         } catch (Exception e) {
