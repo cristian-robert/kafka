@@ -7,10 +7,37 @@ public class AzureTestReporter implements ConcurrentEventListener {
 
     @Override
     public void setEventPublisher(EventPublisher publisher) {
-        System.out.println("AzureTestReporter: Publisher set, initializing test run...");
+               System.out.println("AzureTestReporter: Publisher set, initializing test run...");
         runId = createTestRun();
         System.out.println("AzureTestReporter: Test run created with ID: " + runId);
         publisher.registerHandlerFor(TestCaseFinished.class, this::handleTestCaseFinished);
+        publisher.registerHandlerFor(TestRunFinished.class, this::handleTestRunFinished);
+    }
+
+
+
+     private void handleTestRunFinished(TestRunFinished event) {
+        try {
+            if (runId != null) {
+                String url = String.format("https://dev.azure.com/%s/%s/_apis/test/runs/%d?api-version=6.0",
+                    organization, project, runId);
+                System.out.println("AzureTestReporter: Completing test run at URL: " + url);
+
+                HttpHeaders headers = new HttpHeaders();
+                headers.set("Authorization", "Basic " + Base64.getEncoder().encodeToString((":" + pat).getBytes()));
+                headers.setContentType(MediaType.APPLICATION_JSON);
+
+                Map<String, Object> runUpdate = new HashMap<>();
+                runUpdate.put("state", "Completed");
+
+                var request = new HttpEntity<>(runUpdate, headers);
+                var response = restTemplate.exchange(url, HttpMethod.PATCH, request, String.class);
+                System.out.println("AzureTestReporter: Run completion response: " + response.getBody());
+            }
+        } catch (Exception e) {
+            System.err.println("AzureTestReporter: Error completing test run: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 
     private Integer createTestRun() {
