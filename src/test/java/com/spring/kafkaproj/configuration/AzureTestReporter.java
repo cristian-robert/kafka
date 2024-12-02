@@ -2,7 +2,7 @@ public class AzureTestReporter implements ConcurrentEventListener {
     private final String organization = "your-org";
     private final String project = "your-project";
     private final String pat = "your-pat";
-  private Integer runId;
+ private Integer runId;
     private final RestTemplate restTemplate = new RestTemplate();
 
     @Override
@@ -26,6 +26,8 @@ public class AzureTestReporter implements ConcurrentEventListener {
             runInfo.put("name", "Automated Test Run " + System.currentTimeMillis());
             runInfo.put("isAutomated", true);
             runInfo.put("state", "InProgress");
+            runInfo.put("type", "NoConfigRun");
+            runInfo.put("automatedTestName", "CucumberTest");
 
             var request = new HttpEntity<>(runInfo, headers);
             var response = restTemplate.exchange(url, HttpMethod.POST, request, Map.class);
@@ -52,7 +54,7 @@ public class AzureTestReporter implements ConcurrentEventListener {
 
             System.out.println("Found Test Case ID: " + testCaseId);
             if (testCaseId != null && runId != null) {
-                updateTestResult(testCaseId, event.getResult().getStatus().toString());
+                updateTestResult(testCaseId, event.getResult().getStatus().toString(), event.getTestCase().getName());
             }
         } catch (Exception e) {
             System.err.println("Error in handleTestCaseFinished: " + e.getMessage());
@@ -60,7 +62,7 @@ public class AzureTestReporter implements ConcurrentEventListener {
         }
     }
 
-    private void updateTestResult(String testCaseId, String status) {
+    private void updateTestResult(String testCaseId, String status, String testName) {
         try {
             String url = String.format("https://dev.azure.com/%s/%s/_apis/test/runs/%d/results?api-version=6.0",
                 organization, project, runId);
@@ -73,6 +75,7 @@ public class AzureTestReporter implements ConcurrentEventListener {
             var testResult = new HashMap<String, Object>();
             testResult.put("testCaseId", Integer.parseInt(testCaseId));
             testResult.put("outcome", status.equals("PASSED") ? "Passed" : "Failed");
+            testResult.put("automatedTestName", testName);
 
             System.out.println("Request body: " + testResult);
 
