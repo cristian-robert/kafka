@@ -2,50 +2,33 @@ public class AzureTestReporter implements ConcurrentEventListener {
     private final String organization = "your-org";
     private final String project = "your-project";
     private final String pat = "your-pat";
-      private Integer runId;
+  private Integer runId;
     private final RestTemplate restTemplate = new RestTemplate();
 
     @Override
     public void setEventPublisher(EventPublisher publisher) {
-        publisher.registerHandlerFor(TestRunStarted.class, this::handleTestRunStarted);
+        System.out.println("Publisher set");
         publisher.registerHandlerFor(TestCaseFinished.class, this::handleTestCaseFinished);
     }
 
-    private void handleTestRunStarted(TestRunStarted event) {
-        try {
-            String url = String.format("https://dev.azure.com/%s/%s/_apis/test/runs?api-version=6.0",
-                organization, project);
-
-            HttpHeaders headers = new HttpHeaders();
-            headers.set("Authorization", "Basic " + Base64.getEncoder().encodeToString((":" + pat).getBytes()));
-            headers.setContentType(MediaType.APPLICATION_JSON);
-
-            Map<String, Object> runInfo = new HashMap<>();
-            runInfo.put("name", "Automated Test Run " + System.currentTimeMillis());
-            runInfo.put("isAutomated", true);
-            runInfo.put("state", "InProgress");
-            runInfo.put("results", new ArrayList<>());  // Empty results array required
-
-            var request = new HttpEntity<>(runInfo, headers);
-            var response = restTemplate.exchange(url, HttpMethod.POST, request, Map.class);
-            runId = ((Number) response.getBody().get("id")).intValue();
-            System.out.println("Created test run with ID: " + runId);
-        } catch (Exception e) {
-            System.err.println("Error creating test run: " + e.getMessage());
-            e.printStackTrace();
-        }
-    }
-
     private void handleTestCaseFinished(TestCaseFinished event) {
-        var pickle = event.getTestCase().getPickle();
-        String testCaseId = pickle.getTags().stream()
-            .filter(tag -> tag.startsWith("@TC"))
-            .findFirst()
-            .map(tag -> tag.substring(3))
-            .orElse(null);
+        try {
+            System.out.println("Test case finished: " + event.getTestCase().getName());
+            System.out.println("Tags: " + event.getTestCase().getTags());
+            
+            String testCaseId = event.getTestCase().getTags().stream()
+                .filter(tag -> tag.toString().startsWith("@TC"))
+                .findFirst()
+                .map(tag -> tag.toString().substring(3))
+                .orElse(null);
 
-        if (testCaseId != null && runId != null) {
-            updateTestResult(testCaseId, event.getResult().getStatus().toString());
+            System.out.println("Found Test Case ID: " + testCaseId);
+            if (testCaseId != null) {
+                updateTestResult(testCaseId, event.getResult().getStatus().toString());
+            }
+        } catch (Exception e) {
+            System.err.println("Error in handleTestCaseFinished: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
@@ -53,21 +36,25 @@ public class AzureTestReporter implements ConcurrentEventListener {
         try {
             String url = String.format("https://dev.azure.com/%s/%s/_apis/test/runs/%d/results?api-version=6.0",
                 organization, project, runId);
+            System.out.println("Calling Azure URL: " + url);
 
             HttpHeaders headers = new HttpHeaders();
             headers.set("Authorization", "Basic " + Base64.getEncoder().encodeToString((":" + pat).getBytes()));
             headers.setContentType(MediaType.APPLICATION_JSON);
 
-            var testResult = Map.of(
-                "testCaseId", Integer.parseInt(testCaseId),
-                "outcome", status.equals("PASSED") ? "Passed" : "Failed"
-            );
+            var testResult = new HashMap<String, Object>();
+            testResult.put("testCaseId", Integer.parseInt(testCaseId));
+            testResult.put("outcome", status.equals("PASSED") ? "Passed" : "Failed");
+
+            System.out.println("Request body: " + testResult);
 
             var request = new HttpEntity<>(List.of(testResult), headers);
             ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, request, String.class);
-            System.out.println("Response: " + response.getStatusCode() + " - " + response.getBody());
+
+            System.out.println("Response status: " + response.getStatusCode());
+            System.out.println("Response body: " + response.getBody());
         } catch (Exception e) {
-            System.err.println("Error updating test result: " + e.getMessage());
+            System.err.println("Error in updateTestResult: " + e.getMessage());
             e.printStackTrace();
         }
     }
