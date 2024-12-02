@@ -19,23 +19,34 @@ public class AzureTestReporter implements ConcurrentEventListener {
      private void handleTestRunFinished(TestRunFinished event) {
         try {
             if (runId != null) {
-                String url = String.format("https://dev.azure.com/%s/%s/_apis/test/runs/%d?api-version=6.0",
+                // First try to GET the run to verify auth
+                String getUrl = String.format("https://dev.azure.com/%s/%s/_apis/test/runs/%d?api-version=6.0",
                     organization, project, runId);
-                System.out.println("AzureTestReporter: Completing test run at URL: " + url);
-
+                System.out.println("Testing GET request: " + getUrl);
+                
                 HttpHeaders headers = new HttpHeaders();
                 headers.set("Authorization", "Basic " + Base64.getEncoder().encodeToString((":" + pat).getBytes()));
                 headers.setContentType(MediaType.APPLICATION_JSON);
+                
+                var getRequest = new HttpEntity<>(headers);
+                var getResponse = restTemplate.exchange(getUrl, HttpMethod.GET, getRequest, String.class);
+                System.out.println("GET Response: " + getResponse.getBody());
 
+                // Then try the PUT with more details
                 Map<String, Object> runUpdate = new HashMap<>();
+                runUpdate.put("name", "Cucumber Test Run " + System.currentTimeMillis());
                 runUpdate.put("state", "Completed");
+                runUpdate.put("id", runId);
+                runUpdate.put("automated", true);
+                runUpdate.put("iteration", "1");
+                runUpdate.put("comment", "Test run completed by Cucumber");
 
-                var request = new HttpEntity<>(runUpdate, headers);
-                var response = restTemplate.exchange(url, HttpMethod.PATCH, request, String.class);
-                System.out.println("AzureTestReporter: Run completion response: " + response.getBody());
+                var putRequest = new HttpEntity<>(runUpdate, headers);
+                var putResponse = restTemplate.exchange(getUrl, HttpMethod.PUT, putRequest, String.class);
+                System.out.println("PUT Response: " + putResponse.getBody());
             }
         } catch (Exception e) {
-            System.err.println("AzureTestReporter: Error completing test run: " + e.getMessage());
+            System.err.println("Error: " + e.getMessage());
             e.printStackTrace();
         }
     }
