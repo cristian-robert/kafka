@@ -2,7 +2,7 @@ public class AzureTestReporter implements ConcurrentEventListener {
     private final String organization = "your-org";
     private final String project = "your-project";
     private final String pat = "your-pat";
- private Integer runId;
+  private Integer runId;
     private final RestTemplate restTemplate = new RestTemplate();
 
     @Override
@@ -23,11 +23,17 @@ public class AzureTestReporter implements ConcurrentEventListener {
             headers.setContentType(MediaType.APPLICATION_JSON);
 
             Map<String, Object> runInfo = new HashMap<>();
-            runInfo.put("name", "Automated Test Run " + System.currentTimeMillis());
+            String runName = "Cucumber Test Run " + System.currentTimeMillis();
+            runInfo.put("name", runName);
             runInfo.put("isAutomated", true);
             runInfo.put("state", "InProgress");
             runInfo.put("type", "NoConfigRun");
-            runInfo.put("automatedTestName", "CucumberTest");
+            runInfo.put("testSuite", runName);
+            runInfo.put("plan", runName);
+            runInfo.put("build", Map.of(
+                "id", "1",
+                "name", "Build 1"
+            ));
 
             var request = new HttpEntity<>(runInfo, headers);
             var response = restTemplate.exchange(url, HttpMethod.POST, request, Map.class);
@@ -74,8 +80,23 @@ public class AzureTestReporter implements ConcurrentEventListener {
 
             var testResult = new HashMap<String, Object>();
             testResult.put("testCaseId", Integer.parseInt(testCaseId));
-            testResult.put("outcome", status.equals("PASSED") ? "Passed" : "Failed");
+            testResult.put("testCaseTitle", testName);
             testResult.put("automatedTestName", testName);
+            testResult.put("outcome", status.equals("PASSED") ? "Passed" : "Failed");
+            testResult.put("state", "Completed");
+            testResult.put("testCase", Map.of(
+                "id", Integer.parseInt(testCaseId),
+                "name", testName
+            ));
+            testResult.put("testSuite", Map.of(
+                "id", "1",
+                "name", "Default Suite"
+            ));
+            testResult.put("priority", 1);
+            testResult.put("configuration", Map.of(
+                "id", "1",
+                "name", "Windows"
+            ));
 
             System.out.println("Request body: " + testResult);
 
