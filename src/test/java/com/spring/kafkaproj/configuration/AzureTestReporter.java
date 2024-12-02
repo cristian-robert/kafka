@@ -143,4 +143,88 @@ public class AzureTestReporter implements ConcurrentEventListener {
             e.printStackTrace();
         }
     }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+     private void handleTestCaseFinished(TestCaseFinished event) {
+        try {
+            String testCaseId = event.getTestCase().getTags().stream()
+                .filter(tag -> tag.toString().startsWith("@TC"))
+                .findFirst()
+                .map(tag -> tag.toString().substring(3))
+                .orElse(null);
+
+            System.out.println("Processing test case: " + testCaseId);
+            
+            if (testCaseId != null && !completedTests.contains(testCaseId)) {
+                String url = String.format("https://dev.azure.com/%s/%s/_apis/test/runs/%d/results?api-version=6.0",
+                    organization, project, runId);
+
+                HttpHeaders headers = new HttpHeaders();
+                headers.set("Authorization", "Basic " + Base64.getEncoder().encodeToString((":" + pat).getBytes()));
+                headers.setContentType(MediaType.APPLICATION_JSON);
+
+                var testResult = new HashMap<String, Object>();
+                testResult.put("testCaseId", Integer.parseInt(testCaseId));
+                testResult.put("testCaseTitle", event.getTestCase().getName());
+                testResult.put("outcome", event.getResult().getStatus().equals(Status.PASSED) ? "Passed" : "Failed");
+                testResult.put("state", "Completed");
+                testResult.put("comment", "Executed by Cucumber");
+
+                var request = new HttpEntity<>(List.of(testResult), headers);
+                restTemplate.exchange(url, HttpMethod.POST, request, String.class);
+                
+                completedTests.add(testCaseId);
+                System.out.println("Updated result for test case: " + testCaseId);
+            }
+        } catch (Exception e) {
+            System.err.println("Error updating test result: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    private void handleTestRunFinished(TestRunFinished event) {
+        if (runId != null) {
+            String url = String.format("https://dev.azure.com/%s/%s/_apis/test/runs/%d?api-version=6.0",
+                organization, project, runId);
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("Authorization", "Basic " + Base64.getEncoder().encodeToString((":" + pat).getBytes()));
+            headers.setContentType(MediaType.APPLICATION_JSON);
+
+            var getRequest = new HttpEntity<>(headers);
+            var getResponse = restTemplate.exchange(url, HttpMethod.GET, getRequest, Map.class);
+            System.out.println("Run status before completion: " + getResponse.getBody());
+
+            Map<String, Object> runUpdate = new HashMap<>();
+            runUpdate.put("state", "Completed");
+
+            var request = new HttpEntity<>(runUpdate, headers);
+            var response = restTemplate.exchange(url, HttpMethod.PUT, request, String.class);
+            System.out.println("Run completion response: " + response.getBody());
+        }
+    }
 }
