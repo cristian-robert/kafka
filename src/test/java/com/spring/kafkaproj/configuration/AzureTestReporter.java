@@ -89,10 +89,10 @@ public class AzureTestReporter implements ConcurrentEventListener {
         }
     }
 
-    private void handleTestCaseFinished(TestCaseFinished event) {
+        private void handleTestCaseFinished(TestCaseFinished event) {
         try {
-            System.out.println("\nAzureTestReporter: Processing finished test case: " + event.getTestCase().getName());
-            System.out.println("AzureTestReporter: Test case tags: " + event.getTestCase().getTags());
+            System.out.println("\nTest case finished: " + event.getTestCase().getName());
+            System.out.println("Result: " + event.getResult().getStatus());
             
             String testCaseId = event.getTestCase().getTags().stream()
                 .filter(tag -> tag.toString().startsWith("@TC"))
@@ -100,19 +100,40 @@ public class AzureTestReporter implements ConcurrentEventListener {
                 .map(tag -> tag.toString().substring(3))
                 .orElse(null);
 
-            System.out.println("AzureTestReporter: Extracted Test Case ID: " + testCaseId);
-            
             if (testCaseId != null && runId != null) {
-                System.out.println("AzureTestReporter: Updating test result for TC" + testCaseId);
-                updateTestResult(testCaseId, event.getResult().getStatus().toString(), event.getTestCase().getName());
-            } else {
-                System.out.println("AzureTestReporter: Skipping result update - testCaseId: " + testCaseId + ", runId: " + runId);
+                String url = String.format("https://dev.azure.com/%s/%s/_apis/test/runs/%d/results?api-version=6.0",
+                    organization, project, runId);
+                System.out.println("Updating result at URL: " + url);
+
+                HttpHeaders headers = new HttpHeaders();
+                headers.set("Authorization", "Basic " + Base64.getEncoder().encodeToString((":" + pat).getBytes()));
+                headers.setContentType(MediaType.APPLICATION_JSON);
+
+                var testResult = new HashMap<String, Object>();
+                testResult.put("testCaseId", Integer.parseInt(testCaseId));
+                testResult.put("state", "Completed");
+                testResult.put("outcome", event.getResult().getStatus().equals(Status.PASSED) ? "Passed" : "Failed");
+                testResult.put("automatedTestName", event.getTestCase().getName());
+                testResult.put("testCaseTitle", event.getTestCase().getName());
+
+                System.out.println("Sending test result: " + testResult);
+
+                var request = new HttpEntity<>(List.of(testResult), headers);
+                var response = restTemplate.exchange(url, HttpMethod.POST, request, String.class);
+                System.out.println("Response status: " + response.getStatusCode());
+                System.out.println("Response body: " + response.getBody());
+
+                // Verify the result was recorded
+                var getRequest = new HttpEntity<>(headers);
+                var getResponse = restTemplate.exchange(url, HttpMethod.GET, getRequest, Map.class);
+                System.out.println("Current test results after update: " + getResponse.getBody());
             }
         } catch (Exception e) {
-            System.err.println("AzureTestReporter: Error in handleTestCaseFinished: " + e.getMessage());
+            System.err.println("Error updating test result: " + e.getMessage());
             e.printStackTrace();
         }
     }
+}
 
     private void updateTestResult(String testCaseId, String status, String testName) {
         try {
