@@ -189,18 +189,19 @@ public class AzureTestReporter implements ConcurrentEventListener {
 
 
 
-
-     private void handleTestCaseFinished(TestCaseFinished event) {
+    private void handleTestCaseFinished(TestCaseFinished event) {
         try {
+            System.out.println("\nTest case finished: " + event.getTestCase().getName());
+            System.out.println("Scenario: " + event.getTestCase().getScenarioDesignation());
+            System.out.println("Result: " + event.getResult().getStatus());
+            
             String testCaseId = event.getTestCase().getTags().stream()
                 .filter(tag -> tag.toString().startsWith("@TC"))
                 .findFirst()
                 .map(tag -> tag.toString().substring(3))
                 .orElse(null);
 
-            System.out.println("Processing test case: " + testCaseId);
-            
-            if (testCaseId != null && !completedTests.contains(testCaseId)) {
+            if (testCaseId != null && runId != null) {
                 String url = String.format("https://dev.azure.com/%s/%s/_apis/test/runs/%d/results?api-version=6.0",
                     organization, project, runId);
 
@@ -210,16 +211,25 @@ public class AzureTestReporter implements ConcurrentEventListener {
 
                 var testResult = new HashMap<String, Object>();
                 testResult.put("testCaseId", Integer.parseInt(testCaseId));
-                testResult.put("testCaseTitle", event.getTestCase().getName());
-                testResult.put("outcome", event.getResult().getStatus().equals(Status.PASSED) ? "Passed" : "Failed");
                 testResult.put("state", "Completed");
-                testResult.put("comment", "Executed by Cucumber");
+                testResult.put("outcome", event.getResult().getStatus().equals(Status.PASSED) ? "Passed" : "Failed");
+                testResult.put("automatedTestName", event.getTestCase().getScenarioDesignation());
+                testResult.put("testCaseTitle", event.getTestCase().getScenarioDesignation());
+
+                System.out.println("Sending test result: " + testResult);
 
                 var request = new HttpEntity<>(List.of(testResult), headers);
-                restTemplate.exchange(url, HttpMethod.POST, request, String.class);
-                
-                completedTests.add(testCaseId);
-                System.out.println("Updated result for test case: " + testCaseId);
+                var response = restTemplate.exchange(url, HttpMethod.POST, request, String.class);
+                System.out.println("Response status: " + response.getStatusCode());
+                System.out.println("Response body: " + response.getBody());
+
+                // Extract and store the result ID
+                Map responseMap = new ObjectMapper().readValue(response.getBody(), Map.class);
+                List<Map<String, Object>> value = (List<Map<String, Object>>) responseMap.get("value");
+                if (value != null && !value.isEmpty()) {
+                    Integer resultId = (Integer) value.get(0).get("id");
+                    testResultIds.computeIfAbsent(testCaseId, k -> new ArrayList<>()).add(resultId);
+                }
             }
         } catch (Exception e) {
             System.err.println("Error updating test result: " + e.getMessage());
@@ -227,51 +237,42 @@ public class AzureTestReporter implements ConcurrentEventListener {
         }
     }
 
-
     private void handleTestRunFinished(TestRunFinished event) {
         try {
             if (runId != null) {
-                // First get the test run to get test result IDs
-                String getUrl = String.format("https://dev.azure.com/%s/%s/_apis/test/runs/%d?api-version=6.0",
+                String url = String.format("https://dev.azure.com/%s/%s/_apis/test/runs/%d/results?api-version=6.0",
                     organization, project, runId);
-                
+
                 HttpHeaders headers = new HttpHeaders();
                 headers.set("Authorization", "Basic " + Base64.getEncoder().encodeToString((":" + pat).getBytes()));
                 headers.setContentType(MediaType.APPLICATION_JSON);
 
-                var getRequest = new HttpEntity<>(headers);
-                var getResponse = restTemplate.exchange(getUrl, HttpMethod.GET, getRequest, Map.class);
-                System.out.println("Run status before completion: " + getResponse.getBody());
-
-                // Update test results
-                String resultsUrl = String.format("https://dev.azure.com/%s/%s/_apis/test/runs/%d/results?api-version=6.0",
-                    organization, project, runId);
-
+                // Update all test results using stored IDs
                 List<Map<String, Object>> results = new ArrayList<>();
-                
-                // Get the test results from the response
-                List<Map<String, Object>> testResults = (List<Map<String, Object>>) ((Map)getResponse.getBody()).get("results");
-                if (testResults != null) {
-                    for (Map<String, Object> testResult : testResults) {
-                        Map<String, Object> update = new HashMap<>();
-                        update.put("id", testResult.get("id"));
-                        update.put("state", "Completed");
-                        update.put("outcome", testResult.get("outcome"));
-                        results.add(update);
+                for (List<Integer> ids : testResultIds.values()) {
+                    for (Integer id : ids) {
+                        Map<String, Object> result = new HashMap<>();
+                        result.put("id", id);
+                        result.put("state", "Completed");
+                        results.add(result);
                     }
                 }
 
                 System.out.println("Updating test results with: " + results);
-                var patchRequest = new HttpEntity<>(results, headers);
-                var patchResponse = restTemplate.exchange(resultsUrl, HttpMethod.PATCH, patchRequest, String.class);
-                System.out.println("PATCH Response: " + patchResponse.getBody());
+                if (!results.isEmpty()) {
+                    var patchRequest = new HttpEntity<>(results, headers);
+                    var patchResponse = restTemplate.exchange(url, HttpMethod.PATCH, patchRequest, String.class);
+                    System.out.println("PATCH Response: " + patchResponse.getBody());
+                }
 
-                // Now update the run state
+                // Complete the run
+                String runUrl = String.format("https://dev.azure.com/%s/%s/_apis/test/runs/%d?api-version=6.0",
+                    organization, project, runId);
                 Map<String, Object> runUpdate = new HashMap<>();
                 runUpdate.put("state", "Completed");
 
-                var runRequest = new HttpEntity<>(List.of(runUpdate), headers);
-                var runResponse = restTemplate.exchange(getUrl, HttpMethod.PATCH, runRequest, String.class);
+                var runRequest = new HttpEntity<>(runUpdate, headers);
+                var runResponse = restTemplate.exchange(runUrl, HttpMethod.PATCH, runRequest, String.class);
                 System.out.println("Run completion response: " + runResponse.getBody());
             }
         } catch (Exception e) {
@@ -279,4 +280,5 @@ public class AzureTestReporter implements ConcurrentEventListener {
             e.printStackTrace();
         }
     }
+}
 }
