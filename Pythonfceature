@@ -1,0 +1,67 @@
+import re
+import csv
+from pathlib import Path
+
+def parse_feature_file(feature_file_path):
+    # Read feature file
+    content = Path(feature_file_path).read_text()
+    
+    # Extract all scenario outlines with examples
+    scenario_pattern = re.compile(r'Scenario Outline:(.*?)Examples:(.*?)(?=\n\s*(?:Scenario|$))', re.DOTALL)
+    scenarios = scenario_pattern.finditer(content)
+    
+    test_cases = []
+    for scenario in scenarios:
+        scenario_text = scenario.group()
+        
+        # Get scenario title
+        title = scenario_text.split('\n')[0].replace('Scenario Outline:', '').strip()
+        
+        # Extract steps
+        steps = []
+        step_pattern = re.compile(r'(Given|When|Then|And|But)\s+(.+)')
+        for step in step_pattern.finditer(scenario_text):
+            steps.append(step.group().strip())
+        steps_text = '\n'.join(steps)
+        
+        # Parse examples table
+        table_pattern = re.compile(r'Examples:.*?\|(.*?)\|.*?\n((?:\s*\|.*\|\s*\n?)+)', re.DOTALL)
+        table_match = table_pattern.search(scenario_text)
+        
+        if table_match:
+            # Get headers and rows
+            headers = [h.strip() for h in table_match.group(1).split('|') if h.strip()]
+            rows = [row.strip() for row in table_match.group(2).splitlines() if row.strip()]
+            
+            # Process each example row
+            for i, row in enumerate(rows):
+                values = [v.strip() for v in row.split('|')[1:-1]]
+                
+                # Replace parameters in steps
+                test_steps = steps_text
+                for header, value in zip(headers, values):
+                    test_steps = test_steps.replace(f'<{header}>', value)
+                
+                test_cases.append({
+                    'Title': f'{title} - Example {i+1}',
+                    'Description': f'Generated from Cucumber scenario with example {i+1}',
+                    'Test Steps': test_steps,
+                    'Expected Result': 'Test passes successfully'
+                })
+    
+    return test_cases
+
+def generate_azure_csv(feature_file_path, output_csv_path):
+    test_cases = parse_feature_file(feature_file_path)
+    
+    with open(output_csv_path, 'w', newline='') as csvfile:
+        fieldnames = ['Title', 'Description', 'Test Steps', 'Expected Result']
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(test_cases)
+
+# Usage
+if __name__ == "__main__":
+    feature_file = "path/to/your/feature/file.feature"
+    output_csv = "azure_testcases.csv"
+    generate_azure_csv(feature_file, output_csv)
