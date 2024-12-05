@@ -1,58 +1,37 @@
-param(
-    [string]$FeatureFilePath = "path/to/your/feature/file.feature",
-    [string]$OutputCsvPath = "azure_testcases.csv"
-)
+import re
+from pathlib import Path
 
-function Parse-FeatureFile {
-    param([string]$Content)
+def parse_feature_to_csv(feature_file, output_csv):
+    content = Path(feature_file).read_text()
     
-    $testCases = @()
-    $scenarioPattern = '(?s)Scenario Outline:(.*?)Examples:(.*?)(?=\n\s*(?:Scenario|$))'
+    # Find scenarios with examples
+    scenarios = re.finditer(r'Scenario Outline:(.*?)Examples:(.*?)(?=\n\s*(?:Scenario|$))', content, re.DOTALL)
     
-    $scenarios = [regex]::Matches($Content, $scenarioPattern)
-    
-    foreach ($scenario in $scenarios) {
-        $scenarioText = $scenario.Value
-        $title = ($scenarioText -split '\n')[0] -replace 'Scenario Outline:', '' | % { $_.Trim() }
+    with open(output_csv, 'w') as f:
+        f.write('Title,Description,Test Steps,Expected Result\n')
         
-        $steps = @()
-        $stepPattern = '(Given|When|Then|And|But)\s+(.+)'
-        [regex]::Matches($scenarioText, $stepPattern) | % {
-            $steps += $_.Value.Trim()
-        }
-        $stepsText = $steps -join "`n"
-        
-        $tablePattern = '(?s)Examples:.*?\|(.*?)\|.*?\n((?:\s*\|.*\|\s*\n?)+)'
-        $tableMatch = [regex]::Match($scenarioText, $tablePattern)
-        
-        if ($tableMatch.Success) {
-            $headers = $tableMatch.Groups[1].Value -split '\|' | % { $_.Trim() } | ? { $_ }
-            $rows = $tableMatch.Groups[2].Value -split '\n' | % { $_.Trim() } | ? { $_ }
+        for scenario in scenarios:
+            text = scenario.group()
+            title = text.split('\n')[0].replace('Scenario Outline:', '').strip()
             
-            for ($i = 0; $i -lt $rows.Count; $i++) {
-                $values = $rows[$i] -split '\|' | Select-Object -Skip 1 -SkipLast 1 | % { $_.Trim() }
-                $testSteps = $stepsText
+            # Get steps
+            steps = [step.strip() for step in re.finditer(r'(Given|When|Then|And|But)\s+(.+)', text)]
+            steps_text = '\n'.join(str(step.group()) for step in steps)
+            
+            # Parse examples table
+            table = re.search(r'Examples:.*?\|(.*?)\|.*?\n((?:\s*\|.*\|\s*\n?)+)', text, re.DOTALL)
+            if table:
+                headers = [h.strip() for h in table.group(1).split('|') if h.strip()]
+                rows = [row.strip() for row in table.group(2).splitlines() if row.strip()]
                 
-                for ($j = 0; $j -lt $headers.Count; $j++) {
-                    $testSteps = $testSteps -replace "<$($headers[$j])>", $values[$j]
-                }
-                
-                $testCases += [PSCustomObject]@{
-                    'Title' = "$title - Example $($i + 1)"
-                    'Description' = "Generated from Cucumber scenario with example $($i + 1)"
-                    'Test Steps' = $testSteps
-                    'Expected Result' = "Test passes successfully"
-                }
-            }
-        }
-    }
-    
-    return $testCases
-}
+                for i, row in enumerate(rows, 1):
+                    values = [v.strip() for v in row.split('|')[1:-1]]
+                    test_steps = steps_text
+                    
+                    for header, value in zip(headers, values):
+                        test_steps = test_steps.replace(f'<{header}>', value)
+                    
+                    f.write(f'"{title} - Example {i}","Cucumber scenario example {i}","{test_steps}","Test passes"\n')
 
-# Read feature file and parse content
-$content = Get-Content -Path $FeatureFilePath -Raw
-$testCases = Parse-FeatureFile -Content $content
-
-# Export to CSV
-$testCases | Export-Csv -Path $OutputCsvPath -NoTypeInformation -Encoding UTF8
+# Usage
+parse_feature_to_csv('input.feature', 'azure_tests.csv')
