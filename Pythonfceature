@@ -8,33 +8,30 @@ def parse_feature_to_csv(feature_file, output_csv):
     output_path = os.path.join(current_dir, output_csv)
     
     content = Path(feature_path).read_text()
-    
-    # Find scenarios with examples
     scenarios = re.finditer(r'Scenario Outline:(.*?)Examples:(.*?)(?=\n\s*(?:Scenario|$))', content, re.DOTALL)
     
     with open(output_path, 'w') as f:
-        f.write('Title,Description,Test Steps,Expected Result\n')
+        f.write('Work Item Type,Title,Test,Step Action,Step Expected,Area Path\n')
         
         for scenario in scenarios:
             text = scenario.group()
             title = text.split('\n')[0].replace('Scenario Outline:', '').strip()
             
-            # Get steps
-            steps = []
             step_matches = re.finditer(r'(Given|When|Then|And|But)\s+(.+)', text)
-            steps_text = '\n'.join(step.group().strip() for step in step_matches)
+            steps = [step.group().strip() for step in step_matches]
             
-            # Parse examples table
             table = re.search(r'Examples:.*?\|(.*?)\|.*?\n((?:\s*\|.*\|\s*\n?)+)', text, re.DOTALL)
             if table:
                 headers = [h.strip() for h in table.group(1).split('|') if h.strip()]
                 rows = [row.strip() for row in table.group(2).splitlines() if row.strip()]
                 
-                for i, row in enumerate(rows, 1):
+                for row in rows:
                     values = [v.strip() for v in row.split('|')[1:-1]]
-                    test_steps = steps_text
+                    current_steps = steps.copy()
                     
                     for header, value in zip(headers, values):
-                        test_steps = test_steps.replace(f'<{header}>', value)
+                        current_steps = [step.replace(f'<{header}>', value) for step in current_steps]
                     
-                    f.write(f'"{title} - Example {i}","Cucumber scenario example {i}","{test_steps}","Test passes"\n')
+                    f.write(f'Test Case,{title},,,,TestArea\n')
+                    for i, step in enumerate(current_steps, 1):
+                        f.write(f',,{i},{step},Executed successfully,\n')
