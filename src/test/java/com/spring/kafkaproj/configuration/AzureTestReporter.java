@@ -218,25 +218,29 @@ private void updateTestResult(String testCaseId, String outcome, String comment)
 
 
 
-
 private String extractTestCaseId(Scenario scenario) {
-    Path absolutePath = Paths.get(featurePath, scenario.getUri().toString());
-    
-    try {
-        List<String> lines = Files.readAllLines(absolutePath);
-        int exampleIndex = getExampleIndex(lines, scenario);
-        int headerIndex = findHeaderIndex(lines);
-        
-        if (headerIndex >= 0 && exampleIndex >= 0) {
-            String exampleLine = lines.get(headerIndex + exampleIndex);
-            Pattern pattern = Pattern.compile("\\|\\s*\\w+\\s*\\|\\s*(\\d+)\\s*\\|");
-            Matcher matcher = pattern.matcher(exampleLine);
-            if (matcher.find()) {
-                return matcher.group(1);
-            }
-        }
-    } catch (IOException e) {
-        log.error("Failed to extract testId", e);
-    }
-    return null;
+   try {
+       String example = scenario.getName();
+       System.out.println("Scenario: " + example);
+
+       // Find header line with testId column
+       Pattern headerPattern = Pattern.compile("\\|([^|]+\\|)*\\s*testId\\s*\\|");
+       Matcher headerMatcher = headerPattern.matcher(example);
+       if (headerMatcher.find()) {
+           String header = headerMatcher.group();
+           int testIdColIndex = header.split("\\|").length - 2; // -2 for empty first/last elements
+           
+           // Find data line matching column position
+           Pattern dataPattern = Pattern.compile("\\|([^|]+\\|){" + testIdColIndex + "}\\s*(\\d+)\\s*\\|");
+           Matcher dataMatcher = dataPattern.matcher(example);
+           if (dataMatcher.find()) {
+               System.out.println("Found testId: " + dataMatcher.group(2));
+               return dataMatcher.group(2);
+           }
+       }
+       System.out.println("No match found");
+   } catch (Exception e) {
+       e.printStackTrace();
+   }
+   return null;
 }
