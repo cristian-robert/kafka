@@ -220,14 +220,17 @@ private void updateTestResult(String testCaseId, String outcome, String comment)
 
 
 private String extractTestCaseId(Scenario scenario) {
-    String scenarioId = scenario.getId();
-    int currentLine = Integer.parseInt(scenarioId.substring(scenarioId.lastIndexOf(";") + 1));
-    
     try {
         List<String> lines = Files.readAllLines(Paths.get(scenario.getUri()));
-        int headerIndex = -1;
+        int exampleNumber = 0;
+        for (String line : scenario.getSourceTagNames()) {
+            if (line.contains("Examples")) {
+                exampleNumber = Integer.parseInt(line.replaceAll("\\D+", ""));
+                break;
+            }
+        }
         
-        // Find header line
+        int headerIndex = -1;
         for (int i = 0; i < lines.size(); i++) {
             if (lines.get(i).contains("| testId|")) {
                 headerIndex = i;
@@ -236,8 +239,7 @@ private String extractTestCaseId(Scenario scenario) {
         }
         
         if (headerIndex >= 0) {
-            // Find example line corresponding to current execution
-            String exampleLine = lines.get(headerIndex + (currentLine - headerIndex));
+            String exampleLine = lines.get(headerIndex + exampleNumber);
             Pattern pattern = Pattern.compile("\\|\\s*\\w+\\s*\\|\\s*(\\d+)\\s*\\|");
             Matcher matcher = pattern.matcher(exampleLine);
             if (matcher.find()) {
