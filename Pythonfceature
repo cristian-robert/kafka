@@ -21,15 +21,18 @@ def parse_feature_to_csv(feature_file, output_csv):
             step_matches = re.finditer(r'(Given|When|Then|And|But)\s+(.+)', text)
             steps = [step.group().strip() for step in step_matches]
             
-            # Updated regex to capture multiple columns
             table = re.search(r'Examples:.*?\|(.*?)\|\s*\n((?:\s*\|.*\|.*\n?)+)', text, re.DOTALL)
             if table:
-                headers = [h.strip() for h in table.group(1).split('|') if h.strip()]
+                header_line = table.group(1)
+                headers = [h.strip() for h in header_line.split('|') if h.strip()]
                 rows = [row.strip() for row in table.group(2).splitlines() if row.strip()]
                 
                 for row in rows:
-                    values = [v.strip() for v in row.split('|') if v.strip()]
-                    values_dict = dict(zip(headers, values))
+                    # Split the row and preserve empty values
+                    values = [v.strip() if v.strip() else None for v in row.split('|')[1:-1]]
+                    
+                    # Create dictionary only with non-None values
+                    values_dict = {h: v for h, v in zip(headers, values) if v is not None}
                     
                     current_title = raw_title
                     current_steps = steps.copy()
