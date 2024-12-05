@@ -10,7 +10,7 @@ def parse_feature_to_csv(feature_file, output_csv):
     content = Path(feature_path).read_text()
     scenarios = re.finditer(r'Scenario Outline:(.*?)Examples:(.*?)(?=\n\s*(?:Scenario|$))', content, re.DOTALL)
     
-    with open(output_path, 'w') as f:
+    with open(output_path, 'w', encoding='utf-8') as f:
         f.write('Work Item Type,Title,Test,Step Action,Step Expected,Area Path\n')
         
         for scenario in scenarios:
@@ -30,8 +30,8 @@ def parse_feature_to_csv(feature_file, output_csv):
                     current_steps = steps.copy()
                     current_title = title
                     
-                    # Replace parameters in title and steps
                     for header, value in zip(headers, values):
+                        value = value.replace('&', 'and')  # Replace & with 'and'
                         current_title = current_title.replace(f'<{header}>', value)
                         current_steps = [step.replace(f'<{header}>', value) for step in current_steps]
                     
