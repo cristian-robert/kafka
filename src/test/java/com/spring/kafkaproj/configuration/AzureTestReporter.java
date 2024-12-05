@@ -164,3 +164,88 @@ private void updateTestResult(String testCaseId, String outcome, String comment)
         HttpEntity<Map<String, Object>> completeRequest = new HttpEntity<>(completeData, headers);
         restTemplate.exchange(completeUrl, HttpMethod.PATCH, completeRequest, Map.class);
     }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+private String extractTestCaseId(Scenario scenario) {
+    String scenarioId = scenario.getId();
+    int currentLine = Integer.parseInt(scenarioId.substring(scenarioId.lastIndexOf(";") + 1));
+    
+    try {
+        List<String> lines = Files.readAllLines(Paths.get(scenario.getUri()));
+        int headerIndex = -1;
+        
+        // Find header line
+        for (int i = 0; i < lines.size(); i++) {
+            if (lines.get(i).contains("| testId|")) {
+                headerIndex = i;
+                break;
+            }
+        }
+        
+        if (headerIndex >= 0) {
+            // Find example line corresponding to current execution
+            String exampleLine = lines.get(headerIndex + (currentLine - headerIndex));
+            Pattern pattern = Pattern.compile("\\|\\s*\\w+\\s*\\|\\s*(\\d+)\\s*\\|");
+            Matcher matcher = pattern.matcher(exampleLine);
+            if (matcher.find()) {
+                return matcher.group(1);
+            }
+        }
+    } catch (Exception e) {
+        throw new RuntimeException("Failed to extract test ID", e);
+    }
+    return null;
+}
