@@ -111,23 +111,16 @@ public class AzureTestReporter {
 
 
 
-private void updateTestResult(String testCaseId, String outcome, String comment) {
-        String url = String.format("https://dev.azure.com/%s/%s/_apis/test/Plans/%s/Suites?api-version=7.1", 
-            organization, project, testPlanId);
+   private void updateTestResult(String testCaseId, String outcome, String comment) {
+        String pointsUrl = String.format("https://dev.azure.com/%s/%s/_apis/test/Plans/%s/Suites/%s/points?api-version=7.1",
+            organization, project, testPlanId, suiteId);
             
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("Authorization", "Basic " + Base64.getEncoder().encodeToString((":" + pat).getBytes()));
-        
-        HttpEntity<Void> suitesRequest = new HttpEntity<>(headers);
-        ResponseEntity<Map> suitesResponse = restTemplate.exchange(url, HttpMethod.GET, suitesRequest, Map.class);
-        List<Map<String, Object>> suites = (List<Map<String, Object>>) suitesResponse.getBody().get("value");
-        String suiteId = suites.get(0).get("id").toString();
 
-        String pointsUrl = String.format("https://dev.azure.com/%s/%s/_apis/test/Plans/%s/Suites/%s/points?api-version=7.1",
-            organization, project, testPlanId, suiteId);
-            
-        ResponseEntity<Map> pointsResponse = restTemplate.exchange(pointsUrl, HttpMethod.GET, suitesRequest, Map.class);
+        HttpEntity<Void> pointsRequest = new HttpEntity<>(headers);
+        ResponseEntity<Map> pointsResponse = restTemplate.exchange(pointsUrl, HttpMethod.GET, pointsRequest, Map.class);
         List<Map<String, Object>> points = (List<Map<String, Object>>) pointsResponse.getBody().get("value");
         Integer pointId = points.stream()
             .filter(p -> testCaseId.equals(((Map)p.get("testCase")).get("id")))
