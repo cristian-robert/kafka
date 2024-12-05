@@ -220,26 +220,17 @@ private void updateTestResult(String testCaseId, String outcome, String comment)
 
 
 private String extractTestCaseId(Scenario scenario) {
+    String scenarioId = scenario.getId();
+    String[] parts = scenarioId.split(";");
+    String line = parts[parts.length - 1];
+    
     try {
-        List<String> lines = Files.readAllLines(Paths.get(scenario.getUri()));
-        int exampleNumber = 0;
-        for (String line : scenario.getSourceTagNames()) {
-            if (line.contains("Examples")) {
-                exampleNumber = Integer.parseInt(line.replaceAll("\\D+", ""));
-                break;
-            }
-        }
-        
-        int headerIndex = -1;
-        for (int i = 0; i < lines.size(); i++) {
-            if (lines.get(i).contains("| testId|")) {
-                headerIndex = i;
-                break;
-            }
-        }
+        Resource resource = new ClassPathResource(scenario.getUri().toString());
+        List<String> lines = IOUtils.readLines(resource.getInputStream(), StandardCharsets.UTF_8);
+        int headerIndex = findHeaderIndex(lines);
         
         if (headerIndex >= 0) {
-            String exampleLine = lines.get(headerIndex + exampleNumber);
+            String exampleLine = lines.get(headerIndex + Integer.parseInt(line));
             Pattern pattern = Pattern.compile("\\|\\s*\\w+\\s*\\|\\s*(\\d+)\\s*\\|");
             Matcher matcher = pattern.matcher(exampleLine);
             if (matcher.find()) {
@@ -247,7 +238,16 @@ private String extractTestCaseId(Scenario scenario) {
             }
         }
     } catch (Exception e) {
-        throw new RuntimeException("Failed to extract test ID", e);
+        log.error("Failed to extract testId", e);
     }
     return null;
+}
+
+private int findHeaderIndex(List<String> lines) {
+    for (int i = 0; i < lines.size(); i++) {
+        if (lines.get(i).contains("| testId|")) {
+            return i;
+        }
+    }
+    return -1;
 }
