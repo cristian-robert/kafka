@@ -1,0 +1,55 @@
+@Service
+public class AzureTestPlanService {
+    @Value("${azure.devops.org}")
+    private String organization;
+    
+    @Value("${azure.devops.project}")
+    private String project;
+    
+    @Value("${azure.devops.pat}")
+    private String personalAccessToken;
+    
+    private final RestTemplate restTemplate = new RestTemplate();
+    private static final String BASE_URL = "https://dev.azure.com";
+    private static final String API_VERSION = "api-version=7.0";
+
+    public void createTestRun(String testCaseId, String testPlanId, String suiteId) {
+        String url = String.format("%s/%s/%s/_apis/test/runs?%s", 
+            BASE_URL, organization, project, API_VERSION);
+
+        Map<String, Object> requestBody = new HashMap<>();
+        requestBody.put("name", "Automated Test Run - " + System.currentTimeMillis());
+        requestBody.put("plan", Map.of("id", testPlanId));
+        requestBody.put("pointIds", Arrays.asList(getTestPoint(testPlanId, suiteId, testCaseId)));
+        
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("Authorization", "Basic " + getEncodedCredentials());
+        
+        HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
+        restTemplate.exchange(url, HttpMethod.POST, request, Object.class);
+    }
+    
+    private Integer getTestPoint(String testPlanId, String suiteId, String testCaseId) {
+        String url = String.format("%s/%s/%s/_apis/test/Plans/%s/Suites/%s/Points?%s", 
+            BASE_URL, organization, project, testPlanId, suiteId, API_VERSION);
+        
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Authorization", "Basic " + getEncodedCredentials());
+        
+        HttpEntity<String> request = new HttpEntity<>(headers);
+        ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.GET, request, Map.class);
+        
+        List<Map<String, Object>> points = (List<Map<String, Object>>) response.getBody().get("value");
+        return (Integer) points.stream()
+            .filter(point -> testCaseId.equals(((Map)point.get("testCase")).get("id")))
+            .findFirst()
+            .map(point -> point.get("id"))
+            .orElseThrow(() -> new RuntimeException("Test point not found"));
+    }
+    
+    private String getEncodedCredentials() {
+        String credentials = ":" + personalAccessToken;
+        return Base64.getEncoder().encodeToString(credentials.getBytes());
+    }
+}
