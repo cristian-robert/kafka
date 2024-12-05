@@ -28,10 +28,13 @@ def parse_feature_to_csv(feature_file, output_csv):
                 for row in rows:
                     values = [v.strip() for v in row.split('|')[1:-1]]
                     current_steps = steps.copy()
+                    current_title = title
                     
+                    # Replace parameters in title and steps
                     for header, value in zip(headers, values):
+                        current_title = current_title.replace(f'<{header}>', value)
                         current_steps = [step.replace(f'<{header}>', value) for step in current_steps]
                     
-                    f.write(f'Test Case,{title},,,,TestArea\n')
+                    f.write(f'Test Case,{current_title},,,,TestArea\n')
                     for i, step in enumerate(current_steps, 1):
                         f.write(f',,{i},{step},Executed successfully,\n')
