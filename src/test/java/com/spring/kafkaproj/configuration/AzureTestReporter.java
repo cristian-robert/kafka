@@ -112,43 +112,32 @@ public class AzureTestReporter {
 
 
 private void updateTestResult(String testCaseId, String outcome, String comment) {
-        String url = String.format("https://dev.azure.com/%s/%s/_apis/test/runs?api-version=7.1", 
-            organization, project);
+        String url = String.format("https://dev.azure.com/%s/%s/_apis/test/points?testCaseId=%s&testPlanId=%s&api-version=7.1", 
+            organization, project, testCaseId, testPlanId);
             
-        // Create test run
-        Map<String, Object> runRequest = new HashMap<>();
-        runRequest.put("name", "Automated Test Run");
-        runRequest.put("state", "InProgress");
-        Map<String, Object> plan = new HashMap<>();
-        plan.put("id", testPlanId);
-        runRequest.put("plan", plan);
-
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("Authorization", "Basic " + Base64.getEncoder().encodeToString((":" + pat).getBytes()));
         
-        HttpEntity<Map<String, Object>> runReq = new HttpEntity<>(runRequest, headers);
-        ResponseEntity<Map> runResponse = restTemplate.exchange(url, HttpMethod.POST, runReq, Map.class);
-        Integer runId = (Integer) runResponse.getBody().get("id");
+        // Get test point
+        HttpEntity<Void> pointRequest = new HttpEntity<>(headers);
+        ResponseEntity<Map> pointResponse = restTemplate.exchange(url, HttpMethod.GET, pointRequest, Map.class);
+        List<Map<String, Object>> points = (List<Map<String, Object>>) pointResponse.getBody().get("value");
+        Integer pointId = (Integer) points.get(0).get("id");
 
-        // Update test result
-        String resultUrl = String.format("https://dev.azure.com/%s/%s/_apis/test/Runs/%d/results?api-version=7.1", 
-            organization, project, runId);
+        // Update result
+        String resultUrl = String.format("https://dev.azure.com/%s/%s/_apis/test/Results?api-version=7.1", 
+            organization, project);
 
         Map<String, Object> result = new HashMap<>();
         result.put("outcome", outcome);
         result.put("state", "Completed");
         result.put("testCase", Map.of("id", testCaseId));
+        result.put("testPoint", Map.of("id", pointId));
+        result.put("testPlan", Map.of("id", testPlanId));
         result.put("comment", comment);
 
-        HttpEntity<List<Map<String, Object>>> resultReq = new HttpEntity<>(Collections.singletonList(result), headers);
+        HttpEntity<List<Map<String, Object>>> resultReq = 
+            new HttpEntity<>(Collections.singletonList(result), headers);
         restTemplate.exchange(resultUrl, HttpMethod.POST, resultReq, Object.class);
-
-        // Complete the run
-        String completeUrl = String.format("https://dev.azure.com/%s/%s/_apis/test/runs/%d?api-version=7.1", 
-            organization, project, runId);
-        Map<String, Object> completeRequest = new HashMap<>();
-        completeRequest.put("state", "Completed");
-        HttpEntity<Map<String, Object>> completeReq = new HttpEntity<>(completeRequest, headers);
-        restTemplate.exchange(completeUrl, HttpMethod.PATCH, completeReq, Object.class);
     }
