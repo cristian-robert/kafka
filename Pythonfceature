@@ -8,11 +8,6 @@ def parse_feature_to_csv(feature_file, output_csv):
     output_path = os.path.join(current_dir, output_csv)
     
     content = Path(feature_path).read_text()
-    
-    # Find all parameters in the feature file
-    param_pattern = r'<(\w+)>'
-    all_params = set(re.findall(param_pattern, content))
-    
     scenarios = re.finditer(r'Scenario Outline:.*?Examples:(.*?)(?=\n\s*(?:Scenario|$))', content, re.DOTALL)
     
     with open(output_path, 'w', encoding='utf-8') as f:
@@ -26,23 +21,23 @@ def parse_feature_to_csv(feature_file, output_csv):
             step_matches = re.finditer(r'(Given|When|Then|And|But)\s+(.+)', text)
             steps = [step.group().strip() for step in step_matches]
             
-            table = re.search(r'Examples:.*?\|(.*?)\|.*?\n((?:\s*\|.*\|\s*\n?)+)', text, re.DOTALL)
+            # Updated regex to capture multiple columns
+            table = re.search(r'Examples:.*?\|(.*?)\|\s*\n((?:\s*\|.*\|.*\n?)+)', text, re.DOTALL)
             if table:
-                all_headers = [h.strip() for h in table.group(1).split('|') if h.strip()]
+                headers = [h.strip() for h in table.group(1).split('|') if h.strip()]
                 rows = [row.strip() for row in table.group(2).splitlines() if row.strip()]
                 
                 for row in rows:
-                    values = [v.strip() for v in row.split('|')[1:-1]]
-                    values_dict = dict(zip(all_headers, values))
-                    current_steps = steps.copy()
-                    current_title = raw_title
+                    values = [v.strip() for v in row.split('|') if v.strip()]
+                    values_dict = dict(zip(headers, values))
                     
-                    # Replace all parameters found in values_dict
-                    for param in all_params:
-                        if param in values_dict:
-                            value = values_dict[param].replace('&', 'and')
-                            current_title = current_title.replace(f'<{param}>', value)
-                            current_steps = [step.replace(f'<{param}>', value) for step in current_steps]
+                    current_title = raw_title
+                    current_steps = steps.copy()
+                    
+                    for header, value in values_dict.items():
+                        value = value.replace('&', 'and')
+                        current_title = current_title.replace(f'<{header}>', value)
+                        current_steps = [step.replace(f'<{header}>', value) for step in current_steps]
                     
                     f.write(f'Test Case,{current_title},,,,TestArea\n')
                     for i, step in enumerate(current_steps, 1):
