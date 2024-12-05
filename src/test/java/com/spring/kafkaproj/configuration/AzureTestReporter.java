@@ -217,30 +217,26 @@ private void updateTestResult(String testCaseId, String outcome, String comment)
 
 
 
-
 private String extractTestCaseId(Scenario scenario) {
-   try {
-       String example = scenario.getName();
-       System.out.println("Scenario: " + example);
-
-       // Find header line with testId column
-       Pattern headerPattern = Pattern.compile("\\|([^|]+\\|)*\\s*testId\\s*\\|");
-       Matcher headerMatcher = headerPattern.matcher(example);
-       if (headerMatcher.find()) {
-           String header = headerMatcher.group();
-           int testIdColIndex = header.split("\\|").length - 2; // -2 for empty first/last elements
-           
-           // Find data line matching column position
-           Pattern dataPattern = Pattern.compile("\\|([^|]+\\|){" + testIdColIndex + "}\\s*(\\d+)\\s*\\|");
-           Matcher dataMatcher = dataPattern.matcher(example);
-           if (dataMatcher.find()) {
-               System.out.println("Found testId: " + dataMatcher.group(2));
-               return dataMatcher.group(2);
-           }
-       }
-       System.out.println("No match found");
-   } catch (Exception e) {
-       e.printStackTrace();
-   }
-   return null;
+    Path featurePath = Paths.get("src/test/resources/", 
+        scenario.getUri().toString().replace("classpath:", ""));
+    
+    try {
+        List<String> lines = Files.readAllLines(featurePath);
+        for (int i = 0; i < lines.size(); i++) {
+            if (lines.get(i).trim().contains("| testId |")) {
+                // Get the example row based on line number from scenario ID
+                String lineNumber = scenario.getId().split(";")[1];
+                String exampleLine = lines.get(i + (Integer.parseInt(lineNumber) - i));
+                return Arrays.stream(exampleLine.split("\\|"))
+                    .filter(cell -> !cell.trim().isEmpty())
+                    .reduce((a, b) -> b)
+                    .map(String::trim)
+                    .orElse(null);
+            }
+        }
+    } catch (IOException e) {
+        throw new RuntimeException("Failed to read feature file", e);
+    }
+    return null;
 }
