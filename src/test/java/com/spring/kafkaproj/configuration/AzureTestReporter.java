@@ -112,14 +112,26 @@ public class AzureTestReporter {
 
 
 private void updateTestResult(String testCaseId, String outcome, String comment) {
-        String runUrl = String.format("https://dev.azure.com/%s/%s/_apis/test/runs?api-version=7.1", 
-            organization, project);
+        String pointsUrl = String.format("https://dev.azure.com/%s/%s/_apis/test/Plans/%s/Suites/%s/points?api-version=7.1",
+            organization, project, testPlanId, suiteId);
             
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("Authorization", "Basic " + Base64.getEncoder().encodeToString((":" + pat).getBytes()));
 
+        HttpEntity<Void> pointsRequest = new HttpEntity<>(headers);
+        ResponseEntity<Map> pointsResponse = restTemplate.exchange(pointsUrl, HttpMethod.GET, pointsRequest, Map.class);
+        List<Map<String, Object>> points = (List<Map<String, Object>>) pointsResponse.getBody().get("value");
+        Integer pointId = points.stream()
+            .filter(p -> testCaseId.equals(((Map)p.get("testCase")).get("id")))
+            .findFirst()
+            .map(p -> (Integer)p.get("id"))
+            .orElseThrow(() -> new RuntimeException("Test point not found"));
+
         // Create run
+        String runUrl = String.format("https://dev.azure.com/%s/%s/_apis/test/runs?api-version=7.1", 
+            organization, project);
+
         Map<String, Object> runData = new HashMap<>();
         runData.put("name", comment);
         runData.put("plan", Map.of("id", testPlanId));
@@ -133,10 +145,12 @@ private void updateTestResult(String testCaseId, String outcome, String comment)
             organization, project, runId);
             
         Map<String, Object> result = new HashMap<>();
+        result.put("testPoint", Map.of("id", pointId));
         result.put("testCase", Map.of("id", testCaseId));
+        result.put("testCaseRevision", 1);
+        result.put("testCaseTitle", comment);
         result.put("outcome", outcome);
         result.put("state", "Completed");
-        result.put("comment", comment);
         
         HttpEntity<List<Map<String, Object>>> resultRequest = new HttpEntity<>(Collections.singletonList(result), headers);
         restTemplate.exchange(resultUrl, HttpMethod.POST, resultRequest, Map.class);
