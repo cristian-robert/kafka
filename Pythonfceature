@@ -8,14 +8,15 @@ def parse_feature_to_csv(feature_file, output_csv):
     output_path = os.path.join(current_dir, output_csv)
     
     content = Path(feature_path).read_text()
-    scenarios = re.finditer(r'Scenario Outline:(.*?)Examples:(.*?)(?=\n\s*(?:Scenario|$))', content, re.DOTALL)
+    scenarios = re.finditer(r'Scenario Outline:.*?Examples:(.*?)(?=\n\s*(?:Scenario|$))', content, re.DOTALL)
     
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write('Work Item Type,Title,Test,Step Action,Step Expected,Area Path\n')
         
         for scenario in scenarios:
             text = scenario.group()
-            raw_title = text.split('\n')[0].replace('Scenario Outline:', '').strip()
+            title_match = re.search(r'Scenario Outline: (.*?)(?=\n)', text)
+            raw_title = title_match.group(1) if title_match else ''
             
             step_matches = re.finditer(r'(Given|When|Then|And|But)\s+(.+)', text)
             steps = [step.group().strip() for step in step_matches]
@@ -28,15 +29,14 @@ def parse_feature_to_csv(feature_file, output_csv):
                 for row in rows:
                     values = [v.strip() for v in row.split('|')[1:-1]]
                     values_dict = dict(zip(headers, values))
+                    current_steps = steps.copy()
                     
-                    # Get description from examples table
-                    description = values_dict.get('description', '').replace('&', 'and')
-                    current_title = raw_title.replace('<description>', description)
-                    
-                    # Replace other parameters
+                    # Replace all parameters in title and steps
+                    current_title = raw_title
                     for header, value in values_dict.items():
                         value = value.replace('&', 'and')
-                        current_steps = [step.replace(f'<{header}>', value) for step in steps]
+                        current_title = current_title.replace(f'<{header}>', value)
+                        current_steps = [step.replace(f'<{header}>', value) for step in current_steps]
                     
                     f.write(f'Test Case,{current_title},,,,TestArea\n')
                     for i, step in enumerate(current_steps, 1):
