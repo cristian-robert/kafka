@@ -221,64 +221,38 @@ private String extractTestCaseId(Scenario scenario) {
     Path featurePath = Paths.get("src/test/resources/", 
         scenario.getUri().toString().replace("classpath:", ""));
     
+    System.out.println("Feature file path: " + featurePath);
+    
     try {
         List<String> lines = Files.readAllLines(featurePath);
-        String scenarioName = scenario.getName();
-        
-        int headerIndex = -1;
-        int exampleStartIndex = -1;
-        
-        // Find the Examples section
-        for (int i = 0; i < lines.size(); i++) {
-            String line = lines.get(i).trim();
+        for (String line : lines) {
+            String trimmedLine = line.trim();
+            System.out.println("Processing line: " + trimmedLine);
             
-            // Find the header row with testId
-            if (line.contains("| testId |")) {
-                headerIndex = i;
-            }
-            
-            // Find where the examples start
-            if (headerIndex != -1 && line.startsWith("|") && i > headerIndex) {
-                exampleStartIndex = i;
-                break;
-            }
-        }
-        
-        if (headerIndex != -1 && exampleStartIndex != -1) {
-            // Read the example rows
-            for (int i = exampleStartIndex; i < lines.size(); i++) {
-                String line = lines.get(i).trim();
-                if (!line.startsWith("|")) {
-                    break;  // End of examples section
-                }
-                
-                // Extract all cells from the example row
-                String[] cells = Arrays.stream(line.split("\\|"))
-                    .map(String::trim)
-                    .filter(cell -> !cell.isEmpty())
-                    .toArray(String[]::new);
-                
-                // Get the header cells to find testId column index
-                String[] headerCells = Arrays.stream(lines.get(headerIndex).split("\\|"))
-                    .map(String::trim)
-                    .filter(cell -> !cell.isEmpty())
-                    .toArray(String[]::new);
-                
-                int testIdColumnIndex = -1;
-                for (int j = 0; j < headerCells.length; j++) {
-                    if (headerCells[j].equals("testId")) {
-                        testIdColumnIndex = j;
-                        break;
-                    }
-                }
-                
-                if (testIdColumnIndex != -1 && testIdColumnIndex < cells.length) {
-                    return cells[testIdColumnIndex];
+            if (trimmedLine.contains("Examples:") && trimmedLine.contains("| testId |")) {
+                System.out.println("Found Examples line with testId");
+                int currentIndex = lines.indexOf(line);
+                if (currentIndex + 1 < lines.size()) {
+                    String dataLine = lines.get(currentIndex + 1).trim();
+                    System.out.println("Data line: " + dataLine);
+                    
+                    String[] cells = dataLine.split("\\|");
+                    System.out.println("Cells after split: " + Arrays.toString(cells));
+                    
+                    String testId = Arrays.stream(cells)
+                        .map(String::trim)
+                        .filter(cell -> !cell.isEmpty())
+                        .reduce((first, second) -> second)
+                        .orElse(null);
+                    
+                    System.out.println("Found testId: " + testId);
+                    return testId;
                 }
             }
         }
-        
+        System.out.println("No matching Examples line found");
     } catch (IOException e) {
+        System.err.println("Error reading file: " + e.getMessage());
         throw new RuntimeException("Failed to read feature file", e);
     }
     return null;
