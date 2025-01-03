@@ -220,20 +220,31 @@ private void updateTestResult(String testCaseId, String outcome, String comment)
 private String extractTestCaseId(Scenario scenario) {
     Path featurePath = Paths.get("src/test/resources/", 
         scenario.getUri().toString().replace("classpath:", ""));
-    
-       // Get example index from scenario ID
-    int exampleIndex = Integer.parseInt(scenario.getId().split(";")[1]);
-    
-    try {
+try {
         List<String> lines = Files.readAllLines(featurePath);
+        int examplesHeaderIndex = -1;
+        int rowCounter = 0;
+        String currentScenarioId = "";
+        
+        // Find Examples section and count rows until we find matching scenario
         for (int i = 0; i < lines.size(); i++) {
-            if (lines.get(i).contains("| testId |")) {
-                String dataLine = lines.get(i + exampleIndex).trim();
-                return Arrays.stream(dataLine.split("\\|"))
-                    .map(String::trim)
-                    .filter(cell -> !cell.isEmpty())
-                    .reduce((first, second) -> second)
-                    .orElse(null);
+            String line = lines.get(i).trim();
+            if (line.startsWith("Examples:")) {
+                examplesHeaderIndex = i;
+                continue;
+            }
+            if (examplesHeaderIndex != -1 && line.startsWith("|")) {
+                if (rowCounter == 1) { // First row after header
+                    String testId = Arrays.stream(line.split("\\|"))
+                        .map(String::trim)
+                        .filter(cell -> !cell.isEmpty())
+                        .reduce((first, second) -> second)
+                        .orElse(null);
+                    if (testId != null) {
+                        return testId;
+                    }
+                }
+                rowCounter++;
             }
         }
     } catch (IOException e) {
