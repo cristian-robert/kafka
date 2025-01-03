@@ -223,18 +223,61 @@ private String extractTestCaseId(Scenario scenario) {
     
     try {
         List<String> lines = Files.readAllLines(featurePath);
+        String scenarioName = scenario.getName();
+        
+        int headerIndex = -1;
+        int exampleStartIndex = -1;
+        
+        // Find the Examples section
         for (int i = 0; i < lines.size(); i++) {
-            if (lines.get(i).trim().contains("| testId |")) {
-                // Get the example row based on line number from scenario ID
-                String lineNumber = scenario.getId().split(";")[1];
-                String exampleLine = lines.get(i + (Integer.parseInt(lineNumber) - i));
-                return Arrays.stream(exampleLine.split("\\|"))
-                    .filter(cell -> !cell.trim().isEmpty())
-                    .reduce((a, b) -> b)
-                    .map(String::trim)
-                    .orElse(null);
+            String line = lines.get(i).trim();
+            
+            // Find the header row with testId
+            if (line.contains("| testId |")) {
+                headerIndex = i;
+            }
+            
+            // Find where the examples start
+            if (headerIndex != -1 && line.startsWith("|") && i > headerIndex) {
+                exampleStartIndex = i;
+                break;
             }
         }
+        
+        if (headerIndex != -1 && exampleStartIndex != -1) {
+            // Read the example rows
+            for (int i = exampleStartIndex; i < lines.size(); i++) {
+                String line = lines.get(i).trim();
+                if (!line.startsWith("|")) {
+                    break;  // End of examples section
+                }
+                
+                // Extract all cells from the example row
+                String[] cells = Arrays.stream(line.split("\\|"))
+                    .map(String::trim)
+                    .filter(cell -> !cell.isEmpty())
+                    .toArray(String[]::new);
+                
+                // Get the header cells to find testId column index
+                String[] headerCells = Arrays.stream(lines.get(headerIndex).split("\\|"))
+                    .map(String::trim)
+                    .filter(cell -> !cell.isEmpty())
+                    .toArray(String[]::new);
+                
+                int testIdColumnIndex = -1;
+                for (int j = 0; j < headerCells.length; j++) {
+                    if (headerCells[j].equals("testId")) {
+                        testIdColumnIndex = j;
+                        break;
+                    }
+                }
+                
+                if (testIdColumnIndex != -1 && testIdColumnIndex < cells.length) {
+                    return cells[testIdColumnIndex];
+                }
+            }
+        }
+        
     } catch (IOException e) {
         throw new RuntimeException("Failed to read feature file", e);
     }
