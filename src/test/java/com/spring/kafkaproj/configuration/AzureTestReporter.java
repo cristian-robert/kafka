@@ -221,38 +221,22 @@ private String extractTestCaseId(Scenario scenario) {
     Path featurePath = Paths.get("src/test/resources/", 
         scenario.getUri().toString().replace("classpath:", ""));
     
-    System.out.println("Feature file path: " + featurePath);
+       // Get example index from scenario ID
+    int exampleIndex = Integer.parseInt(scenario.getId().split(";")[1]);
     
     try {
         List<String> lines = Files.readAllLines(featurePath);
-        for (String line : lines) {
-            String trimmedLine = line.trim();
-            System.out.println("Processing line: " + trimmedLine);
-            
-            if (trimmedLine.contains("Examples:") && trimmedLine.contains("| testId |")) {
-                System.out.println("Found Examples line with testId");
-                int currentIndex = lines.indexOf(line);
-                if (currentIndex + 1 < lines.size()) {
-                    String dataLine = lines.get(currentIndex + 1).trim();
-                    System.out.println("Data line: " + dataLine);
-                    
-                    String[] cells = dataLine.split("\\|");
-                    System.out.println("Cells after split: " + Arrays.toString(cells));
-                    
-                    String testId = Arrays.stream(cells)
-                        .map(String::trim)
-                        .filter(cell -> !cell.isEmpty())
-                        .reduce((first, second) -> second)
-                        .orElse(null);
-                    
-                    System.out.println("Found testId: " + testId);
-                    return testId;
-                }
+        for (int i = 0; i < lines.size(); i++) {
+            if (lines.get(i).contains("| testId |")) {
+                String dataLine = lines.get(i + exampleIndex).trim();
+                return Arrays.stream(dataLine.split("\\|"))
+                    .map(String::trim)
+                    .filter(cell -> !cell.isEmpty())
+                    .reduce((first, second) -> second)
+                    .orElse(null);
             }
         }
-        System.out.println("No matching Examples line found");
     } catch (IOException e) {
-        System.err.println("Error reading file: " + e.getMessage());
         throw new RuntimeException("Failed to read feature file", e);
     }
     return null;
