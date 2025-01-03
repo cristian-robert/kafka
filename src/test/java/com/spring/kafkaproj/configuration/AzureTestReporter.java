@@ -220,12 +220,16 @@ private void updateTestResult(String testCaseId, String outcome, String comment)
 private String extractTestCaseId(Scenario scenario) {
     Path featurePath = Paths.get("src/test/resources/", 
         scenario.getUri().toString().replace("classpath:", ""));
- try {
+  int rowNumber = 0;
+   String lastPart = scenario.getId().split("-")[2]; // Get last part "123jh"
+   // Extract numeric value from the last part using regex
+   rowNumber = Integer.parseInt(lastPart.replaceAll("[^0-9]", ""));
+   
+   try {
        List<String> lines = Files.readAllLines(featurePath);
        int headerIndex = -1;
        int testIdColumnIndex = -1;
        
-       // First find table header with testId column
        for (int i = 0; i < lines.size(); i++) {
            String line = lines.get(i).trim();
            if (line.contains("| testId |")) {
@@ -242,7 +246,7 @@ private String extractTestCaseId(Scenario scenario) {
        }
        
        if (headerIndex != -1 && testIdColumnIndex != -1) {
-           String dataLine = lines.get(headerIndex + 1).trim();
+           String dataLine = lines.get(headerIndex + rowNumber).trim();
            String[] cells = dataLine.split("\\|");
            return cells[testIdColumnIndex].trim();
        }
