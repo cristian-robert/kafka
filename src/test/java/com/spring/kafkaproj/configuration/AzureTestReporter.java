@@ -220,35 +220,34 @@ private void updateTestResult(String testCaseId, String outcome, String comment)
 private String extractTestCaseId(Scenario scenario) {
     Path featurePath = Paths.get("src/test/resources/", 
         scenario.getUri().toString().replace("classpath:", ""));
-try {
-        List<String> lines = Files.readAllLines(featurePath);
-        int examplesHeaderIndex = -1;
-        int rowCounter = 0;
-        String currentScenarioId = "";
-        
-        // Find Examples section and count rows until we find matching scenario
-        for (int i = 0; i < lines.size(); i++) {
-            String line = lines.get(i).trim();
-            if (line.startsWith("Examples:")) {
-                examplesHeaderIndex = i;
-                continue;
-            }
-            if (examplesHeaderIndex != -1 && line.startsWith("|")) {
-                if (rowCounter == 1) { // First row after header
-                    String testId = Arrays.stream(line.split("\\|"))
-                        .map(String::trim)
-                        .filter(cell -> !cell.isEmpty())
-                        .reduce((first, second) -> second)
-                        .orElse(null);
-                    if (testId != null) {
-                        return testId;
-                    }
-                }
-                rowCounter++;
-            }
-        }
-    } catch (IOException e) {
-        throw new RuntimeException("Failed to read feature file", e);
-    }
-    return null;
+ try {
+       List<String> lines = Files.readAllLines(featurePath);
+       int headerIndex = -1;
+       int testIdColumnIndex = -1;
+       
+       // First find table header with testId column
+       for (int i = 0; i < lines.size(); i++) {
+           String line = lines.get(i).trim();
+           if (line.contains("| testId |")) {
+               String[] columns = line.split("\\|");
+               for (int j = 0; j < columns.length; j++) {
+                   if (columns[j].trim().equals("testId")) {
+                       testIdColumnIndex = j;
+                       headerIndex = i;
+                       break;
+                   }
+               }
+               break;
+           }
+       }
+       
+       if (headerIndex != -1 && testIdColumnIndex != -1) {
+           String dataLine = lines.get(headerIndex + 1).trim();
+           String[] cells = dataLine.split("\\|");
+           return cells[testIdColumnIndex].trim();
+       }
+   } catch (IOException e) {
+       throw new RuntimeException("Failed to read feature file", e);
+   }
+   return null;
 }
