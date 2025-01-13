@@ -1,0 +1,94 @@
+import re
+from pathlib import Path
+import os
+import glob
+import csv
+
+def escape_quotes(text):
+    return text.replace('"', '""')
+
+def get_existing_test_cases(csv_file):
+    existing_tests = set()
+    if os.path.exists(csv_file):
+        with open(csv_file, 'r', encoding='utf-8') as f:
+            reader = csv.reader(f)
+            next(reader)  # Skip header
+            for row in reader:
+                if row[0] == 'Test Case' and row[1]:  # Only get the test case titles
+                    existing_tests.add(row[1].strip('"'))
+    return existing_tests
+
+def parse_new_scenarios_to_csv(existing_csv, output_csv):
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    output_path = os.path.join(current_dir, output_csv)
+    existing_csv_path = os.path.join(current_dir, existing_csv)
+    
+    # Get existing test cases
+    existing_tests = get_existing_test_cases(existing_csv_path)
+    
+    # Create/open the new CSV file with headers
+    with open(output_path, 'w', encoding='utf-8') as f:
+        f.write('Work Item Type,Title,Test,Step Action,Step Expected,Area Path\n')
+        
+        # Get all .feature files in the current directory
+        feature_files = glob.glob(os.path.join(current_dir, "*.feature"))
+        new_scenarios_found = False
+        
+        for feature_file in feature_files:
+            content = Path(feature_file).read_text(encoding='utf-8')
+            scenarios = re.finditer(r'Scenario Outline:.*?Examples:(.*?)(?=\n\s*(?:Scenario|$))', content, re.DOTALL)
+            
+            for scenario in scenarios:
+                text = scenario.group()
+                title_match = re.search(r'Scenario Outline:\s*(.*?)(?=\n)', text)
+                raw_title = title_match.group(1) if title_match else ''
+                
+                step_matches = re.finditer(r'(Given|When|Then|And|But)\s+(.+)', text)
+                steps = [step.group().strip() for step in step_matches]
+                
+                table = re.search(r'Examples:.*?\|(.*?)\|\s*\n((?:\s*\|.*\|.*\n?)+)', text, re.DOTALL)
+                if table:
+                    headers = [h.strip() for h in table.group(1).split('|') if h.strip()]
+                    rows = [row.strip() for row in table.group(2).splitlines() if row.strip()]
+                    
+                    for row in rows:
+                        values = row.split('|')[1:-1]
+                        values_dict = {}
+                        for i, header in enumerate(headers):
+                            if i < len(values):
+                                value = values[i].strip()
+                                if value:
+                                    values_dict[header] = value
+                        
+                        current_title = raw_title
+                        current_steps = steps.copy()
+                        
+                        for header, value in values_dict.items():
+                            value = value.replace('&', 'and')
+                            current_title = current_title.replace(f'<{header}>', value)
+                            current_steps = [step.replace(f'<{header}>', value) for step in current_steps]
+                        
+                        current_title = escape_quotes(current_title)
+                        current_steps = [escape_quotes(step) for step in current_steps]
+                        
+                        # Add feature file name to the title
+                        feature_name = os.path.basename(feature_file).replace('.feature', '')
+                        full_title = f"{feature_name} - {current_title}"
+                        
+                        # Only write if this is a new test case
+                        if f'"{full_title}"' not in existing_tests:
+                            new_scenarios_found = True
+                            f.write(f'Test Case,"{full_title}",,,,TestArea\n')
+                            for i, step in enumerate(current_steps, 1):
+                                f.write(f',,{i},"{step}",Executed successfully,\n')
+    
+    if not new_scenarios_found:
+        print("No new scenarios found.")
+        # Remove the empty output file if no new scenarios were found
+        if os.path.exists(output_path):
+            os.remove(output_path)
+    else:
+        print(f"New scenarios have been written to {output_csv}")
+
+# Usage
+parse_new_scenarios_to_csv('azure_tests_base.csv', 'updated_azure_tests.csv')
