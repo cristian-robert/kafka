@@ -23,9 +23,26 @@ def parse_feature_to_csv(output_csv):
             content = Path(feature_file).read_text(encoding='utf-8')
             print(f"File content length: {len(content)} characters")
             
-           scenarios = list(re.finditer(r'(?i)scenario\s+outline:.*?examples:.*?(?=\n\s*(?:scenario|$))', content, re.DOTALL | re.IGNORECASE))
-
-            print(f"Found {len(scenarios)} scenario outlines in {feature_file}")
+            print("\nRegex pattern being used:")
+            print(r'Scenario Outline:.*?Examples:(.*?)(?=\n\s*(?:Scenario|$))')
+            
+            print("\nFull file content (to check format):")
+            print("=" * 50)
+            print(content)
+            print("=" * 50)
+            
+            # Try more flexible pattern
+            scenarios = list(re.finditer(r'(?i)scenario\s+outline:.*?examples:.*?(?=\n\s*(?:scenario|$))', content, re.DOTALL | re.IGNORECASE))
+            print(f"\nFound {len(scenarios)} scenario outlines in {feature_file}")
+            
+            if len(scenarios) == 0:
+                print("\nTrying to find just Scenario Outline sections:")
+                scenario_starts = re.findall(r'Scenario Outline:', content)
+                print(f"Found {len(scenario_starts)} 'Scenario Outline:' markers")
+                
+                print("\nTrying to find Examples sections:")
+                examples = re.findall(r'Examples:', content)
+                print(f"Found {len(examples)} 'Examples:' markers")
             
             for scenario_index, scenario in enumerate(scenarios, 1):
                 print(f"\nProcessing scenario {scenario_index}:")
