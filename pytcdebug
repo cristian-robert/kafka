@@ -1,0 +1,85 @@
+import re
+from pathlib import Path
+import os
+import glob
+
+def escape_quotes(text):
+    return text.replace('"', '""')
+
+def parse_feature_to_csv(output_csv):
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    output_path = os.path.join(current_dir, output_csv)
+    
+    # Create/open the CSV file with headers
+    with open(output_path, 'w', encoding='utf-8') as f:
+        f.write('Work Item Type,Title,Test,Step Action,Step Expected,Area Path\n')
+        
+        # Get all .feature files in the current directory
+        feature_files = glob.glob(os.path.join(current_dir, "*.feature"))
+        print(f"Found {len(feature_files)} feature files: {feature_files}")
+        
+        for feature_file in feature_files:
+            print(f"\nProcessing file: {feature_file}")
+            content = Path(feature_file).read_text(encoding='utf-8')
+            print(f"File content length: {len(content)} characters")
+            
+            scenarios = list(re.finditer(r'Scenario Outline:.*?Examples:(.*?)(?=\n\s*(?:Scenario|$))', content, re.DOTALL))
+            print(f"Found {len(scenarios)} scenario outlines in {feature_file}")
+            
+            for scenario_index, scenario in enumerate(scenarios, 1):
+                print(f"\nProcessing scenario {scenario_index}:")
+                text = scenario.group()
+                print(f"Scenario text:\n{text}\n")
+                
+                title_match = re.search(r'Scenario Outline:\s*(.*?)(?=\n)', text)
+                raw_title = title_match.group(1) if title_match else ''
+                print(f"Raw title: {raw_title}")
+                
+                step_matches = re.finditer(r'(Given|When|Then|And|But)\s+(.+)', text)
+                steps = [step.group().strip() for step in step_matches]
+                print(f"Found {len(steps)} steps: {steps}")
+                
+                table = re.search(r'Examples:.*?\|(.*?)\|\s*\n((?:\s*\|.*\|.*\n?)+)', text, re.DOTALL)
+                if table:
+                    headers = [h.strip() for h in table.group(1).split('|') if h.strip()]
+                    print(f"Table headers: {headers}")
+                    
+                    rows = [row.strip() for row in table.group(2).splitlines() if row.strip()]
+                    print(f"Found {len(rows)} example rows")
+                    
+                    for row_index, row in enumerate(rows, 1):
+                        print(f"\nProcessing row {row_index}: {row}")
+                        values = row.split('|')[1:-1]
+                        values_dict = {}
+                        for i, header in enumerate(headers):
+                            if i < len(values):
+                                value = values[i].strip()
+                                if value:
+                                    values_dict[header] = value
+                        print(f"Values dictionary: {values_dict}")
+                        
+                        current_title = raw_title
+                        current_steps = steps.copy()
+                        
+                        for header, value in values_dict.items():
+                            value = value.replace('&', 'and')
+                            current_title = current_title.replace(f'<{header}>', value)
+                            current_steps = [step.replace(f'<{header}>', value) for step in current_steps]
+                        
+                        print(f"Processed title: {current_title}")
+                        print(f"Processed steps: {current_steps}")
+                        
+                        current_title = escape_quotes(current_title)
+                        current_steps = [escape_quotes(step) for step in current_steps]
+                        
+                        feature_name = os.path.basename(feature_file).replace('.feature', '')
+                        full_title = f"{feature_name} - {current_title}"
+                        
+                        f.write(f'Test Case,"{full_title}",,,,TestArea\n')
+                        for i, step in enumerate(current_steps, 1):
+                            f.write(f',,{i},"{step}",Executed successfully,\n')
+                else:
+                    print("WARNING: No Examples table found for this scenario!")
+
+# Usage
+parse_feature_to_csv('azure_tests.csv')
