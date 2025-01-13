@@ -23,7 +23,8 @@ def parse_feature_to_csv(output_csv):
             content = Path(feature_file).read_text(encoding='utf-8')
             print(f"File content length: {len(content)} characters")
             
-            scenarios = list(re.finditer(r'Scenario Outline:.*?Examples:(.*?)(?=\n\s*(?:Scenario|$))', content, re.DOTALL))
+           scenarios = list(re.finditer(r'(?i)scenario\s+outline:.*?examples:.*?(?=\n\s*(?:scenario|$))', content, re.DOTALL | re.IGNORECASE))
+
             print(f"Found {len(scenarios)} scenario outlines in {feature_file}")
             
             for scenario_index, scenario in enumerate(scenarios, 1):
