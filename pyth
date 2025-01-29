@@ -1,0 +1,88 @@
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+def check_dependencies():
+    try:
+        subprocess.check_call([sys.executable, '-m', 'pip', 'install', 
+                             'requests', 'pandas', 'pyinstaller'], 
+                             stdout=subprocess.DEVNULL)
+        return True
+    except subprocess.CalledProcessError:
+        print("Failed to install dependencies")
+        return False
+
+def create_script():
+    script_content = '''import json
+import requests
+import pandas as pd
+import sys
+from pathlib import Path
+
+def make_request(row):
+    url = "urlToMakeRequestTo"
+    
+    payload = json.dumps({
+        "cstmCDT": {
+            "grHd": {
+                "aabb": row['a'],
+                "ctlSum": row['b'],
+                "msg": row['c']
+            }
+        }
+    })
+    
+    headers = {'Content-Type': 'application/json'}
+    
+    try:
+        response = requests.post(url, headers=headers, data=payload)
+        response.raise_for_status()
+        print(f"Row {row.name}: Success")
+        return response.json()
+    except Exception as e:
+        print(f"Row {row.name}: Error - {str(e)}")
+        return None
+
+def main():
+    app_path = Path(sys.executable if getattr(sys, 'frozen', False) else __file__).parent
+    csv_path = app_path / 'transactions.csv'
+    
+    if not csv_path.exists():
+        print(f"Error: transactions.csv not found in {app_path}")
+        input("Press Enter to exit...")
+        return
+        
+    try:
+        df = pd.read_csv(csv_path)
+        for _, row in df.iterrows():
+            make_request(row)
+    except Exception as e:
+        print(f"Error: {str(e)}")
+    
+    input("Press Enter to exit...")
+
+if __name__ == "__main__":
+    main()
+'''
+    with open('request_script.py', 'w') as f:
+        f.write(script_content)
+
+def build():
+    if not check_dependencies():
+        return False
+        
+    create_script()
+    
+    try:
+        subprocess.check_call(['pyinstaller', '--onefile', 'request_script.py'],
+                            stdout=subprocess.DEVNULL)
+        return True
+    except subprocess.CalledProcessError:
+        print("Failed to create executable")
+        return False
+
+if __name__ == "__main__":
+    if build():
+        print("Success! Executable created in 'dist' folder")
+        print("Place transactions.csv in the same folder as the exe")
