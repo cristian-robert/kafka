@@ -5,6 +5,7 @@ import sys
 import os
 from pathlib import Path
 from request_functions import make_request
+import openpyxl
 
 def print_flush(*args, **kwargs):
     print(*args, **kwargs)
@@ -12,13 +13,22 @@ def print_flush(*args, **kwargs):
 
 def main():
     if getattr(sys, 'frozen', False):
-        csv_path = Path(os.path.dirname(sys.executable)) / 'transactions.csv'
+        excel_path = Path(os.path.dirname(sys.executable)) / 'transactions.xlsx'
     else:
-        csv_path = Path(__file__).parent / 'transactions.csv'
+        excel_path = Path(__file__).parent / 'transactions.xlsx'
     
     try:
-        df = pd.read_csv(csv_path, dtype={'account': str})
-        print_flush("CSV columns:", df.columns.tolist())
+        # Read Excel file using openpyxl engine
+        df = pd.read_excel(
+            excel_path,
+            engine='openpyxl',
+            dtype={'account': str}
+        )
+        
+        # Convert any numeric account numbers to string with proper formatting
+        df['account'] = df['account'].apply(lambda x: f"{x:0>10}" if pd.notnull(x) else '')
+        
+        print_flush("Excel columns:", df.columns.tolist())
         print_flush("First row:", df.iloc[0].to_dict())
         
         for index, row in df.iterrows():
@@ -27,7 +37,7 @@ def main():
             make_request(row)
             
     except FileNotFoundError:
-        print_flush(f"transactions.csv not found at: {csv_path}")
+        print_flush(f"transactions.xlsx not found at: {excel_path}")
     except Exception as e:
         print_flush(f"Error type: {type(e)}")
         print_flush(f"Error: {str(e)}")
