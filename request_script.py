@@ -12,6 +12,7 @@ def print_flush(*args, **kwargs):
     sys.stdout.flush()
 
 def main():
+    print_flush("Script starting...")
     if getattr(sys, 'frozen', False):
         excel_path = Path(os.path.dirname(sys.executable)) / 'transactions.xlsx'
     else:
@@ -44,3 +45,6 @@ def main():
         print_flush("Full row data:", row if 'row' in locals() else "No row data")
     
     input("Press Enter to exit...")
+
+if __name__ == "__main__":
+    main()
