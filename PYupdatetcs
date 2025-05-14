@@ -18,37 +18,6 @@ def get_existing_test_cases(csv_file):
                     existing_tests.add(row[1].strip('"'))
     return existing_tests
 
-def parse_table(table_lines):
-    """Parse Cucumber table into a list of dictionaries with proper header mapping"""
-    if not table_lines:
-        return [], []
-    
-    # Get headers
-    header_line = table_lines[0]
-    # Split by '|' and strip whitespace
-    header_parts = [part.strip() for part in header_line.split('|')]
-    # The first and last elements will be empty strings due to the leading and trailing '|'
-    # So we exclude them
-    headers = header_parts[1:-1]
-    
-    rows = []
-    for data_line in table_lines[1:]:
-        # Split by '|' and strip whitespace
-        line_parts = [part.strip() for part in data_line.split('|')]
-        # Get the values, excluding the first and last empty strings
-        values = line_parts[1:-1]
-        
-        # Create a dictionary mapping headers to values
-        if len(values) == len(headers):
-            row_dict = {headers[i]: values[i] for i in range(len(headers))}
-            rows.append(row_dict)
-        else:
-            print(f"Warning: Mismatched columns in line: {data_line}")
-            print(f"Headers: {headers} (count: {len(headers)})")
-            print(f"Values: {values} (count: {len(values)})")
-    
-    return headers, rows
-
 def parse_new_scenarios_to_csv(existing_csv, output_csv):
     current_dir = os.path.dirname(os.path.abspath(__file__))
     output_path = os.path.join(current_dir, output_csv)
@@ -96,37 +65,44 @@ def parse_new_scenarios_to_csv(existing_csv, output_csv):
                     # Parse table - only take lines containing '|'
                     table_lines = [line.strip() for line in table_text.split('\n') if '|' in line]
                     
-                    if table_lines:
-                        # Parse the table properly
-                        headers, rows = parse_table(table_lines)
-                        print(f"Parsed headers: {headers}")
-                        print(f"Found {len(rows)} data rows")
+                    if len(table_lines) >= 2:  # Need at least header + one data row
+                        # First line is header - store it to use for placeholder replacement
+                        header_line = table_lines[0]
+                        header_parts = [part.strip() for part in header_line.split('|')]
+                        # Remove empty strings at beginning and end
+                        headers = [h for h in header_parts if h]
+                        print(f"Headers: {headers}")
                         
-                        # Check if the table has headers
-                        if not headers:
-                            print("WARNING: No headers found in table!")
-                            continue
-                        
-                        # Check if the last header is 'testId'
-                        last_header = headers[-1]
-                        print(f"Last header: {last_header}")
-                        
-                        if last_header.lower() != 'testid':
-                            print(f"Skipping table - last header is not 'testId', got: {last_header}")
-                            continue
-                        
-                        # Process each row
-                        for row_index, row_dict in enumerate(rows, 1):
-                            print(f"\nRow {row_index}: {row_dict}")
+                        # Process each data row (skipping the header)
+                        for row_index, data_line in enumerate(table_lines[1:], 1):
+                            print(f"\nProcessing row {row_index}: {data_line}")
                             
-                            # Only process rows where the testId column is empty
-                            testid_value = row_dict.get(last_header, '')
-                            # Strip to handle empty spaces
-                            if testid_value.strip() != '':
-                                print(f"Skipping row with non-empty testId: '{testid_value}'")
+                            # Split the line by '|' and strip whitespace
+                            parts = [part.strip() for part in data_line.split('|')]
+                            # Remove empty strings at beginning and end
+                            values = [v for v in parts if v != '']
+                            
+                            # Check if last column value is empty
+                            if '|' not in data_line:
+                                print(f"Skipping invalid row: {data_line}")
                                 continue
-                            else:
-                                print(f"Processing row with empty testId")
+                                
+                            # Get raw split data to properly check last column
+                            raw_parts = data_line.split('|')
+                            # Check if last column before the final | is empty
+                            last_value = raw_parts[-2].strip()
+                            
+                            if last_value != '':
+                                print(f"Skipping row with non-empty last column: '{last_value}'")
+                                continue
+                            
+                            print(f"Processing row with empty last column")
+                            
+                            # Create a dictionary of placeholders and values
+                            row_dict = {}
+                            for i, value in enumerate(values):
+                                if i < len(headers):  # Ensure we don't go out of bounds
+                                    row_dict[headers[i]] = value
                             
                             # Apply values to title and steps
                             current_title = raw_title
@@ -159,7 +135,7 @@ def parse_new_scenarios_to_csv(existing_csv, output_csv):
                             else:
                                 print(f"Skipping existing scenario: {full_title}")
                     else:
-                        print("WARNING: No table lines found in Examples section!")
+                        print("WARNING: Table has too few lines!")
                 else:
                     print("WARNING: No Examples section found in this block!")
     
