@@ -72,66 +72,116 @@ def parse_new_scenarios_to_csv(existing_csv, output_csv):
                     # Parse table
                     table_lines = [line.strip() for line in table_text.split('\n') if '|' in line]
                     if table_lines:
-                        # Get headers
-                        headers = [h.strip() for h in table_lines[0].split('|')[1:-1] if h.strip()]
-                        print(f"Table headers: {headers}")
+                        # Extract and clean up headers
+                        header_line = table_lines[0]
+                        headers = [h.strip() for h in header_line.split('|') if h.strip()]
+                        print(f"Raw headers: {headers}")
                         
-                        # Check if testId column exists (exact match)
-                        test_id_column = None
-                        for idx, header in enumerate(headers):
+                        # Find testId column index
+                        test_id_index = -1
+                        for i, header in enumerate(headers):
                             if header == 'testId':
-                                test_id_column = idx
-                                print(f"Found testId column at index {test_id_column}")
+                                test_id_index = i
+                                print(f"Found testId at index {test_id_index}")
                                 break
                         
-                        # Get rows
-                        rows = table_lines[1:]
-                        print(f"Found {len(rows)} example rows")
-                        
-                        for row_index, row in enumerate(rows, 1):
-                            print(f"\nProcessing row {row_index}: {row}")
-                            values = row.split('|')[1:-1]
-                            values_dict = {}
-                            for i, header in enumerate(headers):
-                                if i < len(values):
-                                    value = values[i].strip()
-                                    values_dict[header] = value
-                            print(f"Values dictionary: {values_dict}")
-                            
-                            # Skip this row if it has a non-empty testId
-                            if test_id_column is not None:
-                                if test_id_column < len(values):
-                                    test_id_value = values[test_id_column].strip()
-                                    if test_id_value:
-                                        print(f"Skipping row with testId: {test_id_value}")
-                                        continue
-                            
-                            current_title = raw_title
-                            current_steps = steps.copy()
-                            
-                            for header, value in values_dict.items():
-                                value = value.replace('&', 'and')
-                                current_title = current_title.replace(f'<{header}>', value)
-                                current_steps = [step.replace(f'<{header}>', value) for step in current_steps]
-                            
-                            print(f"Processed title: {current_title}")
-                            print(f"Processed steps: {current_steps}")
-                            
-                            current_title = escape_quotes(current_title)
-                            current_steps = [escape_quotes(step) for step in current_steps]
-                            
-                            feature_name = os.path.basename(feature_file).replace('.feature', '')
-                            full_title = f"{feature_name} - {current_title}"
-                            
-                            # Only write if this is a new test case
-                            if f'"{full_title}"' not in existing_tests:
-                                new_scenarios_found = True
-                                print(f"New scenario found: {full_title}")
-                                f.write(f'Test Case,"{full_title}",,,,TestArea\n')
-                                for i, step in enumerate(current_steps, 1):
-                                    f.write(f',,{i},"{step}",Executed successfully,\n')
-                            else:
-                                print(f"Skipping existing scenario: {full_title}")
+                        # If testId column exists, process each row checking testId value
+                        if test_id_index >= 0:
+                            # Process data rows
+                            for row_index, row in enumerate(table_lines[1:], 1):
+                                print(f"\nProcessing row {row_index}: {row}")
+                                
+                                # Extract values from row
+                                values = [v.strip() for v in row.split('|') if v.strip() != '']
+                                print(f"Values in row: {values}")
+                                
+                                # Check if we have a testId and if it's empty
+                                has_empty_test_id = False
+                                if test_id_index < len(values):
+                                    test_id_value = values[test_id_index]
+                                    print(f"testId value: '{test_id_value}'")
+                                    if not test_id_value:
+                                        has_empty_test_id = True
+                                        print("Found row with empty testId - will generate test case")
+                                else:
+                                    # If index is out of range, consider it empty
+                                    has_empty_test_id = True
+                                    print("testId index out of range - treating as empty")
+                                
+                                if not has_empty_test_id:
+                                    print(f"Skipping row with non-empty testId")
+                                    continue
+                                
+                                # Now create a mapping of placeholders to values
+                                placeholder_values = {}
+                                for i, header in enumerate(headers):
+                                    if i < len(values):
+                                        placeholder_values[f"<{header}>"] = values[i].replace('&', 'and')
+                                
+                                print(f"Placeholder mapping: {placeholder_values}")
+                                
+                                # Apply placeholder values to title and steps
+                                current_title = raw_title
+                                current_steps = steps.copy()
+                                
+                                for placeholder, value in placeholder_values.items():
+                                    current_title = current_title.replace(placeholder, value)
+                                    current_steps = [step.replace(placeholder, value) for step in current_steps]
+                                
+                                print(f"Processed title: {current_title}")
+                                print(f"Processed steps: {current_steps}")
+                                
+                                current_title = escape_quotes(current_title)
+                                current_steps = [escape_quotes(step) for step in current_steps]
+                                
+                                feature_name = os.path.basename(feature_file).replace('.feature', '')
+                                full_title = f"{feature_name} - {current_title}"
+                                
+                                # Only write if this is a new test case
+                                if f'"{full_title}"' not in existing_tests:
+                                    new_scenarios_found = True
+                                    print(f"New scenario found: {full_title}")
+                                    f.write(f'Test Case,"{full_title}",,,,TestArea\n')
+                                    for i, step in enumerate(current_steps, 1):
+                                        f.write(f',,{i},"{step}",Executed successfully,\n')
+                                else:
+                                    print(f"Skipping existing scenario: {full_title}")
+                        else:
+                            print("No testId column found - processing all rows as before")
+                            # Process all rows if no testId column exists (original behavior)
+                            for row_index, row in enumerate(table_lines[1:], 1):
+                                print(f"\nProcessing row {row_index}: {row}")
+                                values = [v.strip() for v in row.split('|') if v.strip() != '']
+                                headers_clean = [h.strip() for h in table_lines[0].split('|') if h.strip()]
+                                
+                                values_dict = {}
+                                for i, header in enumerate(headers_clean):
+                                    if i < len(values):
+                                        values_dict[header] = values[i]
+                                
+                                current_title = raw_title
+                                current_steps = steps.copy()
+                                
+                                for header, value in values_dict.items():
+                                    value = value.replace('&', 'and')
+                                    current_title = current_title.replace(f'<{header}>', value)
+                                    current_steps = [step.replace(f'<{header}>', value) for step in current_steps]
+                                
+                                current_title = escape_quotes(current_title)
+                                current_steps = [escape_quotes(step) for step in current_steps]
+                                
+                                feature_name = os.path.basename(feature_file).replace('.feature', '')
+                                full_title = f"{feature_name} - {current_title}"
+                                
+                                # Only write if this is a new test case
+                                if f'"{full_title}"' not in existing_tests:
+                                    new_scenarios_found = True
+                                    print(f"New scenario found: {full_title}")
+                                    f.write(f'Test Case,"{full_title}",,,,TestArea\n')
+                                    for i, step in enumerate(current_steps, 1):
+                                        f.write(f',,{i},"{step}",Executed successfully,\n')
+                                else:
+                                    print(f"Skipping existing scenario: {full_title}")
                     else:
                         print("WARNING: No table lines found in Examples section!")
                 else:
