@@ -76,6 +76,14 @@ def parse_new_scenarios_to_csv(existing_csv, output_csv):
                         headers = [h.strip() for h in table_lines[0].split('|')[1:-1] if h.strip()]
                         print(f"Table headers: {headers}")
                         
+                        # Check if testId column exists (exact match)
+                        test_id_column = None
+                        for idx, header in enumerate(headers):
+                            if header == 'testId':
+                                test_id_column = idx
+                                print(f"Found testId column at index {test_id_column}")
+                                break
+                        
                         # Get rows
                         rows = table_lines[1:]
                         print(f"Found {len(rows)} example rows")
@@ -87,9 +95,16 @@ def parse_new_scenarios_to_csv(existing_csv, output_csv):
                             for i, header in enumerate(headers):
                                 if i < len(values):
                                     value = values[i].strip()
-                                    if value:
-                                        values_dict[header] = value
+                                    values_dict[header] = value
                             print(f"Values dictionary: {values_dict}")
+                            
+                            # Skip this row if it has a non-empty testId
+                            if test_id_column is not None:
+                                if test_id_column < len(values):
+                                    test_id_value = values[test_id_column].strip()
+                                    if test_id_value:
+                                        print(f"Skipping row with testId: {test_id_value}")
+                                        continue
                             
                             current_title = raw_title
                             current_steps = steps.copy()
