@@ -23,18 +23,20 @@ def parse_table(table_lines):
     if not table_lines:
         return [], []
     
-    # Get headers - account for the leading and trailing '|'
+    # Get headers
     header_line = table_lines[0]
+    # Split by '|' and strip whitespace
     header_parts = [part.strip() for part in header_line.split('|')]
-    # Remove empty strings that might appear at the beginning or end
-    headers = [h for h in header_parts if h]
+    # The first and last elements will be empty strings due to the leading and trailing '|'
+    # So we exclude them
+    headers = header_parts[1:-1]
     
     rows = []
     for data_line in table_lines[1:]:
         # Split by '|' and strip whitespace
         line_parts = [part.strip() for part in data_line.split('|')]
-        # Filter out empty strings
-        values = [v for v in line_parts if v != ""]
+        # Get the values, excluding the first and last empty strings
+        values = line_parts[1:-1]
         
         # Create a dictionary mapping headers to values
         if len(values) == len(headers):
@@ -100,22 +102,31 @@ def parse_new_scenarios_to_csv(existing_csv, output_csv):
                         print(f"Parsed headers: {headers}")
                         print(f"Found {len(rows)} data rows")
                         
-                        # Check if testId column exists
-                        has_test_id_column = 'testId' in headers
-                        print(f"Has testId column: {has_test_id_column}")
+                        # Check if the table has headers
+                        if not headers:
+                            print("WARNING: No headers found in table!")
+                            continue
+                        
+                        # Check if the last header is 'testId'
+                        last_header = headers[-1]
+                        print(f"Last header: {last_header}")
+                        
+                        if last_header.lower() != 'testid':
+                            print(f"Skipping table - last header is not 'testId', got: {last_header}")
+                            continue
                         
                         # Process each row
                         for row_index, row_dict in enumerate(rows, 1):
                             print(f"\nRow {row_index}: {row_dict}")
                             
-                            # Skip if testId column exists and has a non-empty value
-                            if has_test_id_column:
-                                test_id_value = row_dict.get('testId', '')
-                                if test_id_value:
-                                    print(f"Skipping row with non-empty testId: '{test_id_value}'")
-                                    continue
-                                else:
-                                    print(f"Processing row with empty testId")
+                            # Only process rows where the testId column is empty
+                            testid_value = row_dict.get(last_header, '')
+                            # Strip to handle empty spaces
+                            if testid_value.strip() != '':
+                                print(f"Skipping row with non-empty testId: '{testid_value}'")
+                                continue
+                            else:
+                                print(f"Processing row with empty testId")
                             
                             # Apply values to title and steps
                             current_title = raw_title
